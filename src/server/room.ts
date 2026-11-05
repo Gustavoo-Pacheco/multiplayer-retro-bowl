@@ -25,6 +25,8 @@ export class Room extends DurableObject<Env> implements RoomHost {
     const att = ws.deserializeAttachment() as { seat: Seat | null } | null;
     let seat: Seat | null = att?.seat ?? null;
     c = {
+      win: undefined,
+      count: undefined,
       get seat() { return seat; },
       set seat(v: Seat | null) { seat = v; ws.serializeAttachment({ seat: v }); },
       send: (d) => { try { ws.send(d); } catch { /* socket already closed */ } },
@@ -69,7 +71,11 @@ export class Room extends DurableObject<Env> implements RoomHost {
   }
 
   // RoomHost
-  conns(): Conn[] { return this.ctx.getWebSockets().map((w) => this.conn(w)); }
+  get devTools(): boolean { return this.env.DEV_TOOLS === '1'; }
+  restart(): void { this.ctx.abort('dev restart'); }
+  conns(): Conn[] {
+    return this.ctx.getWebSockets().filter((w) => w.readyState === WebSocket.OPEN).map((w) => this.conn(w));
+  }
   now(): number { return Date.now(); }
   random(): number { return Math.random(); }
   token(): string { return crypto.randomUUID(); }

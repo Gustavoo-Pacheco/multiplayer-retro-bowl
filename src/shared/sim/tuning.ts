@@ -10,7 +10,8 @@ export const T = {
     camEase: 5, camLead: 6, spriteH: 26,
   },
 
-  attr: { min: 1, max: 10, baseLo: 3, baseHi: 8, scoreLo: 60, scoreHi: 99, positionJitter: 1, starBonus: 2 },
+  attr: { min: 1, max: 10, baseLo: 3, baseHi: 8, scoreLo: 60, scoreHi: 99, positionJitter: 1, starBonus: 2, backupPenalty: 2 },
+  kit: { closeColor: 110 },
   ratings: { compressedCenter: 80, compressedFactor: 0.5, equalScore: 80 },
 
   speed: {
@@ -88,7 +89,7 @@ export const T = {
     otTimeouts: 2,
   },
 
-  rules: { touchback: 25, xpSpot: 23, twoPointSpot: 2, firstDownYards: 10, kickoffTouchback: 25 },
+  rules: { touchback: 25, xpLosYards: 16, twoPointSpot: 2, firstDownYards: 10 },
 
   /** Server and client timers, in milliseconds. */
   timers: {
@@ -97,7 +98,7 @@ export const T = {
     choiceDefaultGrace: 300,
   },
   net: {
-    frameMs: 50, bufferMs: 150, bufferMaxMs: 600, maxFrameBytes: 256, maxMsgPerSec: 60, backoffMin: 500, backoffMax: 5000,
+    frameMs: 50, bufferMs: 150, bufferMaxMs: 600, maxFrameBytes: 256, maxMsgPerSec: 60, backoffMin: 500, backoffMax: 5000, pingMs: 8000, pongTimeoutMs: 20000,
   },
   input: {
     tapMaxMove: 8, tapMaxMs: 200, swipePx: 24, swipeMs: 250, truckHoldMs: 180,

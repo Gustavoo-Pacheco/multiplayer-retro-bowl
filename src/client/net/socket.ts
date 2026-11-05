@@ -1,5 +1,6 @@
 // One WebSocket per player, with automatic reconnect (0.5 s to 5 s backoff) and heartbeats.
 import type { ClientMsg, ServerMsg } from '../../shared/protocol';
+import { T } from '../../shared/sim/tuning';
 
 export type NetStatus = 'connecting' | 'open' | 'closed';
 
@@ -18,16 +19,12 @@ export interface NetHandlers {
   onFatal(code: number): void;
 }
 
-const BACKOFF_MIN = 500;
-const BACKOFF_MAX = 5000;
-const PING_MS = 8000;
-const PONG_TIMEOUT_MS = 20000;
 const FATAL = new Set([4001, 4004, 4009, 4010]);
 
 export class Net implements NetLike {
   status: NetStatus = 'closed';
   private ws: WebSocket | null = null;
-  private backoff = BACKOFF_MIN;
+  private backoff = T.net.backoffMin;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
   private lastPong = 0;
@@ -45,16 +42,16 @@ export class Net implements NetLike {
     this.setStatus('connecting');
     ws.onopen = () => {
       if (ws !== this.ws) return;
-      this.backoff = BACKOFF_MIN;
+      this.backoff = T.net.backoffMin;
       this.lastPong = Date.now();
       this.setStatus('open');
       this.h.onOpen();
       if (this.ping) clearInterval(this.ping);
       this.ping = setInterval(() => {
         if (ws.readyState !== WebSocket.OPEN) return;
-        if (Date.now() - this.lastPong > PONG_TIMEOUT_MS) { ws.close(); this.handleClose(ws, 1006); return; }
+        if (Date.now() - this.lastPong > T.net.pongTimeoutMs) { ws.close(); this.handleClose(ws, 1006); return; }
         ws.send('ping');
-      }, PING_MS);
+      }, T.net.pingMs);
     };
     ws.onmessage = (ev) => {
       if (ws !== this.ws) return;
@@ -76,7 +73,7 @@ export class Net implements NetLike {
     if (FATAL.has(code)) { this.h.onFatal(code); return; }
     if (this.stopped || code === 4000) return;
     this.retry = setTimeout(() => this.connect(), this.backoff);
-    this.backoff = Math.min(BACKOFF_MAX, this.backoff * 2);
+    this.backoff = Math.min(T.net.backoffMax, this.backoff * 2);
   }
 
   private setStatus(s: NetStatus): void { this.status = s; this.h.onStatus(s); }

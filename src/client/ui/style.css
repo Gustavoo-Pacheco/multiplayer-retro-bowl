@@ -15,3 +15,25 @@ input { font:inherit; color:var(--text); background:#0d1720; border:2px solid va
 .overlay { position:absolute; inset:0; pointer-events:none; }
 .overlay button, .overlay a, .overlay input { pointer-events:auto; }
 .hud-banner { position:absolute; left:50%; bottom:7%; transform:translateX(-50%); background:#000; color:#fff; padding:2px 10px; white-space:nowrap; }
+
+.hud { position:absolute; inset:0; font-size:calc(var(--u) * 7); }
+.hud button { font:700 calc(var(--u) * 7)/1.1 ui-monospace,Menlo,Consolas,monospace; padding:calc(var(--u) * 3) calc(var(--u) * 6); border-width:calc(var(--u) * 1); background:rgba(13,23,32,.88); }
+.hud-buttons { position:absolute; left:calc(var(--u) * 6); bottom:calc(var(--u) * 6); display:flex; gap:calc(var(--u) * 5); }
+.hud-pause { position:absolute; right:calc(var(--u) * 6); bottom:calc(var(--u) * 6); }
+.hud-menu { position:absolute; right:calc(var(--u) * 34); bottom:calc(var(--u) * 6); }
+.hud-popup { display:none; position:absolute; right:calc(var(--u) * 6); bottom:calc(var(--u) * 26); pointer-events:auto; }
+.hud-popup.open { display:block; }
+.hud-dialog { display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(13,23,32,.95); border:calc(var(--u) * 1) solid var(--accent); padding:calc(var(--u) * 8) calc(var(--u) * 10); flex-direction:column; gap:calc(var(--u) * 4); pointer-events:auto; min-width:calc(var(--u) * 170); }
+.hud-dialog.open { display:flex; }
+.hud-q { text-align:center; color:var(--accent); font-size:calc(var(--u) * 10); margin-bottom:calc(var(--u) * 3); }
+.hud-status { position:absolute; left:50%; top:22%; transform:translateX(-50%); background:#000; color:#fff; padding:calc(var(--u) * 3) calc(var(--u) * 8); white-space:nowrap; }
+.menu-panel { background:var(--panel); border:2px solid var(--line); padding:16px; }
+.final { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:auto; display:flex; flex-direction:column; gap:10px; align-items:center; max-height:96%; overflow:auto; min-width:min(92%, 460px); font-size:14px; }
+.final h2 { margin:0; color:var(--accent); font-size:26px; }
+.score-table, .stat-table { border-collapse:collapse; width:100%; text-align:center; }
+.score-table th, .score-table td { padding:2px 8px; border-bottom:1px solid var(--line); }
+.stat-table td, .stat-table th { padding:1px 8px; }
+.stat-table th { color:var(--dim); font-weight:400; }
+.tot { color:var(--accent); }
+.row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.dim { color:var(--dim); }

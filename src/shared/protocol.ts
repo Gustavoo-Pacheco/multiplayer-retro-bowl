@@ -1,25 +1,60 @@
 // Message types shared by the browser and the room server.
+import type { MatchConfig } from './data/config';
+import type { Choice, MatchState } from './rules/match';
+import type { PlayDesc, PlayResult, Seat, SimState } from './sim/state';
 
-export type Seat = 0 | 1;
+export type { Seat } from './sim/state';
 
 export interface SeatView {
   nick: string;
   online: boolean;
+  visible: boolean;
+  team: string | null;
+  ready: boolean;
 }
 
 export interface RoomView {
   code: string;
   seats: [SeatView | null, SeatView | null];
+  config: MatchConfig;
+  screen: 'lobby' | 'match';
 }
+
+export type HandoffReason = 'int' | 'fumble' | 'kick' | 'onside';
 
 export type ClientMsg =
   | { t: 'join'; token?: string; soft?: boolean; nick: string; create?: boolean }
-  | { t: 'ptr'; x: number; y: number };
+  | { t: 'ptr'; x: number; y: number }
+  | { t: 'setConfig'; patch: Partial<MatchConfig> }
+  | { t: 'pickTeam'; team: string }
+  | { t: 'ready'; ready: boolean }
+  | { t: 'rematch' }
+  | { t: 'snap'; playId: number }
+  | { t: 'audible'; playId: number }
+  | { t: 'timeout' }
+  | { t: 'choice'; c: Choice }
+  | { t: 'pause' }
+  | { t: 'concede' }
+  | { t: 'claimWin' }
+  | { t: 'visibility'; visible: boolean }
+  | { t: 'skip' }
+  | { t: 'handoff'; playId: number; state: SimState; to: Seat; reason: HandoffReason; spotX: number }
+  | { t: 'playResult'; result: PlayResult }
+  | { t: 'dev'; op: 'patch' | 'expire' | 'restart' | 'force'; patch?: Partial<MatchState>; what?: string };
 
 export type ServerMsg =
   | { t: 'welcome'; seat: Seat; token: string }
   | { t: 'room'; room: RoomView }
   | { t: 'ptr'; seat: Seat; x: number; y: number }
+  | { t: 'playStart'; play: PlayDesc; match: MatchState; pc: number | null }
+  | { t: 'matchState'; match: MatchState; pc: number | null; live: { playId: number; controller: Seat } | null; bannerMs: number | null }
+  | { t: 'snap'; playId: number; auto: boolean; clock: number }
+  | { t: 'handoff'; playId: number; state: SimState; reason: HandoffReason }
+  | { t: 'yield'; playId: number; to: Seat; reason: HandoffReason }
+  | { t: 'continue'; playId: number }
+  | { t: 'clock'; pc: number | null }
+  | { t: 'paused'; by: Seat | null; left: number }
+  | { t: 'waiting'; on: boolean; missing: [boolean, boolean]; left: [number | null, number | null]; canClaim: Seat | null }
   | { t: 'error'; code: ErrorCode; msg?: string };
 
 export type ErrorCode = 'full' | 'notfound' | 'exists' | 'badmsg' | 'rate' | 'forbidden' | 'phase';
@@ -37,7 +72,7 @@ export function makeRoomCode(rand: () => number = Math.random): string {
 // ---------------------------------------------------------------------------
 // Frames: the binary snapshot streamed 20 times a second while a play is live.
 // ---------------------------------------------------------------------------
-import { PHASES, type SimPhase, type SimState } from './sim/state';
+import { PHASES, type SimPhase } from './sim/state';
 
 export const PLAYER_COUNT = 16;
 const HEADER = 22;

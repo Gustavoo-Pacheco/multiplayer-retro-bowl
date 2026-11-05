@@ -81,5 +81,6 @@ function enterRoom(code: string, create: boolean): void {
 const m = location.pathname.match(/^\/r\/([^/]+)$/);
 const query = new URLSearchParams(location.search);
 if (query.has('practice')) void import('./game/practice').then((x) => x.startPractice(app));
+else if (query.has('local')) void import('./game/start-local').then((x) => x.startLocal(app));
 else if (m && CODE_RE.test(m[1].toUpperCase())) enterRoom(m[1].toUpperCase(), false);
 else showTitle();
