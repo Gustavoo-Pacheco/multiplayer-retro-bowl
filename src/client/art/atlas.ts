@@ -1,6 +1,6 @@
 // Recolours the composed sprites for a kit and bakes them into an offscreen canvas.
 import { BUILDS, type BuildName } from './parts';
-import { CELL_H, CELL_W, CELLS, cellIndex, composedCells } from './compose';
+import { ART_SCALE, CELL_H, CELL_W, CELLS, cellIndex, composedCells } from './compose';
 import { paletteFor, SKINS, type Kit } from './palette';
 
 const COLS = 20;
@@ -42,8 +42,9 @@ export class Atlas {
     const i = cellIndex(build, name, frame);
     const sx = (i % COLS) * CELL_W;
     const sy = Math.floor(i / COLS) * CELL_H;
-    const dx = Math.round(x) - CELL_W / 2;
-    const dy = Math.round(y) - CELL_H + 1;
+    // Snapping to even pixels keeps figures on the same chunky grid as the field.
+    const dx = Math.round(x / ART_SCALE) * ART_SCALE - CELL_W / 2;
+    const dy = Math.round(y / ART_SCALE) * ART_SCALE - CELL_H + ART_SCALE;
     if (face >= 0) ctx.drawImage(this.canvas, sx, sy, CELL_W, CELL_H, dx, dy, CELL_W, CELL_H);
     else {
       ctx.save();

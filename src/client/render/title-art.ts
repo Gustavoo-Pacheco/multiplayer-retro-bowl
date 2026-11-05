@@ -2,7 +2,7 @@
 import type { Weather } from '../../shared/data/config';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { ATLAS } from '../art/atlas';
-import { shade, teamKit } from '../art/palette';
+import { teamKit } from '../art/palette';
 import { buildField, drawField } from './field';
 import { drawText, textWidth } from './font';
 import { H, screenX, screenY, W } from './view';
@@ -44,13 +44,20 @@ export function logoCanvas(): HTMLCanvasElement {
   const text = 'BORG BOWL';
   const scale = 6;
   const c = document.createElement('canvas');
-  c.width = textWidth(text, scale) + 16;
-  c.height = 7 * scale + 16;
+  c.width = textWidth(text, scale) + 20;
+  c.height = 7 * scale + 20;
   c.className = 'logo';
   const g = c.getContext('2d')!;
+  // A stack of hard offsets makes the letters look cut from a block.
   const gold = '#ffd23f';
-  for (let i = 5; i > 0; i--) drawText(g, text, 4 + i, 4 + i, i > 3 ? '#000' : shade(gold, 0.45), scale);
+  for (let i = 8; i > 0; i -= 2) drawText(g, text, 4 + i, 4 + i, i > 6 ? '#000' : '#c0261c', scale);
+  drawText(g, text, 2, 2, '#000', scale);
   drawText(g, text, 4, 4, gold, scale);
+  // A light band across the top of the letters.
+  g.globalCompositeOperation = 'source-atop';
+  g.fillStyle = '#fff4b8';
+  g.fillRect(4, 4, c.width, scale * 2);
+  g.globalCompositeOperation = 'source-over';
   c.setAttribute('role', 'img');
   c.setAttribute('aria-label', 'Borg Bowl');
   return c;

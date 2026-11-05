@@ -88,6 +88,19 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
         if (!shotHalf && st.phase === 'banner' && st.kind === 'half') {
           await a.page.waitForTimeout(500);
           await shot(a.page, `match-halftime-${size}`);
+          // A kick's last frame can still be around at halftime, and its meter must stay off the banner.
+          const meter = await a.page.evaluate(async () => {
+            const b = (window as any).__borg;
+            if (b.match.phase !== 'banner') return null;
+            const saved = b.frame.phase;
+            b.frame.phase = 'kickAim';
+            b.hasFrame = true;
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const shown = b.meterShown;
+            b.frame.phase = saved;
+            return shown;
+          });
+          if (meter !== null) expect(meter, 'kick meter on the halftime banner').toBe(false);
           shotHalf = true;
         }
         if (!shotPlay && st.sim === 'pocket') { await shot(a.page, `match-play-${size}`); shotPlay = true; }

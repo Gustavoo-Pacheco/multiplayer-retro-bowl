@@ -30,6 +30,7 @@ async function offenseAtPresnap(a: Player, b: Player, timeout = 120000): Promise
 }
 
 /** Forces an interception on the next pass from this page. */
+/** A longer hold risks a sack before the throw, which means no pick: 2.5 s missed about 1 play in 4, and 0.8 s about 1 in 200. */
 async function forcePick(off: Player, hold = 0.6): Promise<void> {
   await off.page.evaluate((h) => { const s = (window as any).__borg; s.bot.plan = 'pass'; s.bot.holdUntil = h; s.sim.force = 'int'; s.bot.playId = s.sim.desc.id; }, hold);
 }
@@ -141,7 +142,7 @@ test('turnover with the watcher offline: the auto-runner finishes, and the match
   const { a, b } = await ready(baseURL);
   try {
     const { off, def } = await offenseAtPresnap(a, b);
-    await forcePick(off, 2.5);
+    await forcePick(off, 0.8);
     await pocket(off);
     def.proxy.block(true);
     const before = (await snap(off.page)).continues;
@@ -164,7 +165,7 @@ test('turnover with the watcher\'s page hidden: the auto-runner finishes', async
   const { a, b } = await ready(baseURL);
   try {
     const { off, def } = await offenseAtPresnap(a, b);
-    await forcePick(off, 2.5);
+    await forcePick(off, 0.8);
     await pocket(off);
     await def.page.evaluate(() => (window as any).__room.net.send({ t: 'visibility', visible: false }));
     const before = (await snap(off.page)).continues;

@@ -1,4 +1,4 @@
-// Builds the menu font from the same 5 x 7 glyphs the canvas uses, so the whole game shares one typeface.
+// Builds the menu font from the same 6 x 7 glyphs the canvas uses, so the whole game shares one typeface.
 // Run with: npx tsx tools/make-font.ts
 import { writeFileSync } from 'node:fs';
 import { glyphBox, GLYPH_ROWS } from '../src/client/render/font';
@@ -7,7 +7,7 @@ const UNIT = 100; // One font pixel, in font units.
 const EM = UNIT * 8;
 const ASC = UNIT * 7;
 const DESC = UNIT;
-const ADV = UNIT * 6;
+const ADV = UNIT * 7;
 
 class Writer {
   bytes: number[] = [];
@@ -30,10 +30,10 @@ function rectsFor(rows: number[], left: number): [number, number, number, number
   const out: [number, number, number, number][] = [];
   rows.forEach((bits, r) => {
     let c = 0;
-    while (c < 5) {
-      if (!(bits & (16 >> c))) { c++; continue; }
+    while (c < 7) {
+      if (!(bits & (64 >> c))) { c++; continue; }
       const start = c;
-      while (c < 5 && bits & (16 >> c)) c++;
+      while (c < 7 && bits & (64 >> c)) c++;
       out.push([(start - left) * UNIT, (6 - r) * UNIT, (c - left) * UNIT, (7 - r) * UNIT]);
     }
   });

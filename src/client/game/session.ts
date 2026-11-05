@@ -20,7 +20,7 @@ import { audio } from '../audio/engine';
 import { ATLAS } from '../art/atlas';
 import { lum, teamKit, type Kit } from '../art/palette';
 import { drawField, buildField, type FieldArt } from '../render/field';
-import { drawStrip, drawText } from '../render/font';
+import { drawStrip, drawText, textWidth } from '../render/font';
 import { drawHud } from '../render/hud';
 import { drawBanner, drawKickMeter, drawScoreboard, drawWeather } from '../render/overlays';
 import { drawScene, type SceneInfo } from '../render/scene';
@@ -79,6 +79,8 @@ export class Session {
   turnBanner = '';
   turnBannerEnd = 0;
   pres = new Presentation();
+  /** Whether the last drawn frame included the kick meter. */
+  meterShown = false;
   private holdUntil = 0;
   private acc = 0;
   private lastFrameSent = 0;
@@ -487,10 +489,10 @@ export class Session {
 
   private drawReplayFrame(ctx: CanvasRenderingContext2D, now: number): void {
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 14, 640, 14);
-    ctx.fillRect(0, 346, 640, 14);
-    if (Math.floor(now / 500) % 2 === 0) { ctx.fillStyle = '#ff3b30'; ctx.fillRect(12, 18, 6, 6); }
-    drawText(ctx, 'REPLAY', 24, 18, '#fff');
+    ctx.fillRect(0, 344, 640, 16);
+    ctx.fillRect(4, 4, 120, 22);
+    if (Math.floor(now / 500) % 2 === 0) { ctx.fillStyle = '#ff3b30'; ctx.fillRect(10, 10, 10, 10); }
+    drawText(ctx, 'REPLAY', 26, 8, '#fff', 2);
   }
 
   private placeholderInfo(m: MatchState): SceneInfo {
@@ -508,11 +510,11 @@ export class Session {
     } else if (m.phase === 'banner' && m.banner) {
       const scoring = m.banner.kind === 'touchdown' || m.banner.kind === 'score';
       const team = scoring && m.last ? m.teams[m.last.possessor] : null;
-      const sub = team ? TEAM_BY_ID[team].nick.toUpperCase() : m.banner.kind === 'half' ? 'HALFTIME SCORES' : '';
+      const sub = team ? TEAM_BY_ID[team].nick.toUpperCase() : '';
       drawBanner(ctx, m.banner.text, m.banner.kind, sub, team, this.pres.bannerAge(now));
       if (m.banner.kind === 'half') drawScoreboard(ctx, m);
     } else if (sim && this.controlling()) {
-      if (sim.phase === 'pre') bottom = 'TAP TO SNAP. TAP THE RB TO HAND OFF, THE QB TO RUN';
+      if (sim.phase === 'pre') bottom = 'TAP TO SNAP. TAP RB TO HAND OFF, QB TO RUN';
       else if (sim.phase === 'kickPower') bottom = 'TAP IN THE GREEN FOR POWER';
       else if (sim.phase === 'kickAim') bottom = 'TAP AS THE ARROW CROSSES THE MIDDLE';
       else if (sim.phase === 'pocket') bottom = sim.aim.on ? 'RELEASE TO THROW' : 'DRAG BACK TO AIM';
@@ -523,11 +525,17 @@ export class Session {
     const c = this.pres.commentary;
     if (c && m.phase !== 'live' && m.phase !== 'coinToss' && m.phase !== 'final' && m.phase !== 'banner' && m.phase !== 'replay' && m.last) {
       const team = TEAM_BY_ID[m.teams[m.last.possessor]];
-      drawStrip(ctx, c, 320, 24, lum(team.primary) > 0.62 ? '#14181c' : '#fff', 1, team.primary);
+      drawStrip(ctx, c, 320, 74, lum(team.primary) > 0.62 ? '#14181c' : '#fff', textWidth(c, 2) <= 620 ? 2 : 1, team.primary);
     }
-    if (bottom) drawStrip(ctx, bottom, 320, 340);
+    if (bottom) {
+      // A long hint sits higher, clear of the buttons in the bottom corners.
+      const wide = textWidth(bottom, 2) > 360;
+      drawStrip(ctx, bottom, 320, wide ? 318 : 334, '#fff', 2);
+    }
     const f = this.frame;
-    if (this.hasFrame && (f.phase === 'kickPower' || f.phase === 'kickAim') && m.phase !== 'replay') drawKickMeter(ctx, f);
+    // The last frame can still be a kick once a banner is up, so the meter only shows while a kick is being taken.
+    this.meterShown = this.hasFrame && (f.phase === 'kickPower' || f.phase === 'kickAim') && (m.phase === 'presnap' || m.phase === 'live');
+    if (this.meterShown) drawKickMeter(ctx, f);
     if (now < this.turnBannerEnd) drawStrip(ctx, this.turnBanner, 320, 140, '#ffd23f', 3);
   }
 

@@ -43,3 +43,6 @@ Gaps in the plan, and the simplest choice made for each.
 | 37 | Music | Only on the title, lobby and halftime screens | The plan rules out music during plays, and lobby waiting is otherwise silent |
 | 38 | Crowd | Filtered noise, with swells on big plays | The plan asks for this, and it needs no audio files |
 | 39 | Title field | The title screen's field leaves out the midfield team letters | The panel sits over them and left two stray letters showing |
+| 40 | Look of the game | Requested look: the feel of retro 16-bit football games. All sprites, menus, fonts and score displays are original drawings for Borg Bowl, with no art, layouts or logos copied from any other game | Another game's art is its publisher's copyright, while a general retro style is free to use |
+| 41 | Chunky pixels | Sprites, field lines and particles sit on a 2-pixel grid inside the 640 x 360 canvas, rather than a smaller canvas | Input, camera and layout all stay as they were, and only the drawing changes |
+| 42 | Sprite cell | 48 by 42 screen pixels, made from a 24 by 21 art grid. Replaces the 44 by 34 cell in row 29 | The chunkier figures need room for raised arms and jumps |

@@ -21,7 +21,7 @@ function sheet(team: string, away: boolean, skin: number, build: BuildName, name
 
 /** One team's home and away figures, close together, for the chart of all 32. */
 function kitCell(team: string): HTMLCanvasElement {
-  const STEP = 26;
+  const STEP = 24;
   const c = h('canvas', { width: STEP * 2, height: CELL_H, style: `width:${STEP * 2 * SCALE}px;height:${CELL_H * SCALE}px;image-rendering:pixelated;background:#3f8a44` });
   const g = c.getContext('2d')!;
   g.imageSmoothingEnabled = false;

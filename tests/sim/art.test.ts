@@ -56,7 +56,8 @@ describe('sprites', () => {
       const r = CELLS[i];
       const pose = POSES[r.name][r.frame];
       const lowest = c.rows.reduce((low, row, y) => (/[^.O]/.test(row) ? y : low), 0);
-      expect(lowest, `${r.build}:${r.name}`).toBe(CELL_H - 1 - (pose.air ?? 0));
+      // The feet sit one art pixel above the bottom of the cell, leaving room for their outline.
+      expect(lowest, `${r.build}:${r.name}`).toBe(CELL_H - 3 - 2 * Math.round((pose.air ?? 0) / 2));
     });
   });
 

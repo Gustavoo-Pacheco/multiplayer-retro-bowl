@@ -98,23 +98,27 @@ function drawSideline(ctx: CanvasRenderingContext2D, cam: number, kits: [Kit, Ki
 // --- Small things on the field --------------------------------------------
 
 function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, tick: number, spin: boolean): void {
-  const px = Math.round(x);
-  const py = Math.round(y);
+  const px = Math.round(x / 2) * 2;
+  const py = Math.round(y / 2) * 2;
   const turn = spin ? Math.floor(tick / 4) % 3 : 0;
-  ctx.fillStyle = '#7a4a22';
-  if (turn === 0) { ctx.fillRect(px - 2, py - 1, 5, 3); ctx.fillStyle = '#f4f4ee'; ctx.fillRect(px, py - 1, 1, 1); }
-  else if (turn === 1) { ctx.fillRect(px - 1, py - 2, 3, 2); ctx.fillRect(px, py - 1, 3, 2); ctx.fillStyle = '#f4f4ee'; ctx.fillRect(px + 1, py - 1, 1, 1); }
-  else { ctx.fillRect(px - 1, py - 2, 3, 5); ctx.fillStyle = '#f4f4ee'; ctx.fillRect(px, py, 1, 1); }
+  ctx.fillStyle = '#17181c';
+  if (turn === 2) ctx.fillRect(px - 4, py - 6, 8, 12);
+  else ctx.fillRect(px - 6, py - 4, 12, 8);
+  ctx.fillStyle = '#9c5a24';
+  if (turn === 2) ctx.fillRect(px - 2, py - 4, 4, 8);
+  else ctx.fillRect(px - 4, py - 2, 8, 4);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(px - (turn === 1 ? 2 : 0), py - (turn === 1 ? 2 : 0), 2, 2);
 }
 
 function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   ctx.fillStyle = '#17181c';
-  ctx.fillRect(x - 3, y - 1, 7, 3);
-  ctx.fillRect(x - 1, y - 3, 3, 7);
+  ctx.fillRect(x - 6, y - 2, 12, 4);
+  ctx.fillRect(x - 2, y - 6, 4, 12);
   ctx.fillStyle = '#ffd23f';
-  ctx.fillRect(x - 2, y, 5, 1);
-  ctx.fillRect(x, y - 2, 1, 5);
-  ctx.fillRect(x - 1, y - 1, 3, 3);
+  ctx.fillRect(x - 4, y, 8, 2);
+  ctx.fillRect(x, y - 4, 2, 8);
+  ctx.fillRect(x - 2, y - 2, 6, 6);
 }
 
 function drawRing(ctx: CanvasRenderingContext2D, x: number, y: number): void {
@@ -129,8 +133,8 @@ function drawRoute(ctx: CanvasRenderingContext2D, f: Frame, r: SceneInfo['routes
   const X = (x: number) => screenX(x, cam);
   const startX = X(f.px[r.i]);
   const startY = screenY(f.py[r.i]);
-  ctx.strokeStyle = r.color ?? '#7dff7d';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = r.color ?? '#ffe94a';
+  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(startX, startY);
   let lx = startX;
@@ -163,15 +167,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
   const Y = screenY;
   const fieldH = T.view.fieldH;
   // Line of scrimmage and first-down line, with a chain marker on the far sideline.
-  ctx.fillStyle = '#4aa3ff';
-  ctx.fillRect(Math.round(X(info.desc.los)), Y(0), 2, fieldH);
+  ctx.fillStyle = '#3f8cff';
+  ctx.fillRect(Math.round(X(info.desc.los) / 2) * 2, Y(0), 4, fieldH);
   if (info.firstDownX !== null) {
-    const fx = Math.round(X(info.firstDownX));
+    const fx = Math.round(X(info.firstDownX) / 2) * 2;
     ctx.fillStyle = '#ffd23f';
-    ctx.fillRect(fx, Y(0), 2, fieldH);
-    ctx.fillStyle = '#ff8a1e';
-    ctx.fillRect(fx - 1, Y(0) - 11, 4, 11);
-    ctx.fillRect(fx - 3, Y(0) - 14, 8, 4);
+    ctx.fillRect(fx, Y(0), 4, fieldH);
+    ctx.fillStyle = '#ff7a1e';
+    ctx.fillRect(fx, Y(0) - 12, 4, 12);
+    ctx.fillRect(fx - 4, Y(0) - 16, 12, 6);
   }
   // Route lines, before the snap and while the QB holds the ball.
   if (f.phase === 'pre' || f.phase === 'pocket') for (const r of info.routes) drawRoute(ctx, f, r, cam);
@@ -180,7 +184,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
   for (let i = 0; i < opts.trail.length; i++) {
     const p = opts.trail[i];
     ctx.fillStyle = `rgba(255,255,255,${(0.08 + (0.32 * i) / opts.trail.length).toFixed(2)})`;
-    ctx.fillRect(Math.round(X(p.x)), Math.round(Y(p.y) - p.z * PY), 2, 2);
+    ctx.fillRect(Math.round(X(p.x) / 2) * 2, Math.round((Y(p.y) - p.z * PY) / 2) * 2, 2, 2);
   }
 
   if (f.carrier >= 0 && f.carrier < f.px.length && f.phase !== 'dead') drawRing(ctx, X(f.px[f.carrier]), Y(f.py[f.carrier]));
@@ -219,20 +223,20 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
       const cell = composedCells()[cellIndex(build, pose, frame)];
       drawBall(ctx, sx + face * (cell.hand[0] - CELL_W / 2), sy + (cell.hand[1] - (CELL_H - 1)), f.tick, false);
     }
-    if (opts.starMarkers && info.stars[i]) drawStar(ctx, sx, sy - 31);
+    if (opts.starMarkers && info.stars[i]) drawStar(ctx, sx, sy - 38);
     if (opts.nameTags && info.names[i] && (f.carrier === i || info.routes.some((r) => r.i === i)) && (f.phase === 'pre' || f.phase === 'pocket' || f.carrier === i)) {
       const tag = info.names[i].toUpperCase().slice(0, 12);
       const tw = textWidth(tag);
-      ctx.fillStyle = 'rgba(0,0,0,.7)';
-      ctx.fillRect(sx + 9, sy - 19, tw + 3, 9);
-      drawText(ctx, tag, sx + 11, sy - 18, '#fff');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(sx + 12, sy - 24, tw + 4, 10);
+      drawText(ctx, tag, sx + 14, sy - 23, '#fff');
     }
     if (f.carrier === i && f.meter > 0 && f.phase !== 'dead') {
       // The truck meter.
       ctx.fillStyle = '#000';
-      ctx.fillRect(sx - 11, sy - 34, 22, 4);
-      ctx.fillStyle = '#ff8a1e';
-      ctx.fillRect(sx - 10, sy - 33, Math.round(20 * Math.min(1, f.meter)), 2);
+      ctx.fillRect(sx - 12, sy - 40, 24, 6);
+      ctx.fillStyle = '#ff7a1e';
+      ctx.fillRect(sx - 10, sy - 38, Math.round(10 * Math.min(1, f.meter)) * 2, 2);
     }
   }
   drawRef();
@@ -259,13 +263,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
     const ty = qy + f.ay * PY;
     ctx.globalAlpha = Math.max(0.05, info.aimAlpha);
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(qx, qy - 10); ctx.lineTo(tx, ty); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(tx, ty, 6, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#fff';
-    ctx.fillRect(Math.round(tx), Math.round(ty), 1, 1);
+    ctx.fillRect(Math.round(tx / 2) * 2, Math.round(ty / 2) * 2, 2, 2);
     ctx.globalAlpha = 1;
   }
 }

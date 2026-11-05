@@ -1,4 +1,4 @@
-// A 5 x 7 bitmap font for the canvas: original glyphs, one hex pair per row.
+// A heavy 6 x 7 bitmap font for the canvas: original glyphs, one hex pair per row, thickened when parsed.
 const GLYPHS: Record<string, string> = {
   A: '0e1111 1f111111', B: '1e11111e11111e', C: '0e11101010110e', D: '1e11111111111e', E: '1f10101e10101f', F: '1f10101e101010',
   G: '0e111017111 10f', H: '1111111f111111', I: '0e04040404040e', J: '0702020202120c', K: '11121418141211', L: '1010101010101f',
@@ -18,14 +18,25 @@ for (const [ch, hex] of Object.entries(GLYPHS)) {
   const h = hex.replace(/ /g, '');
   const rows: number[] = [];
   for (let i = 0; i < 14; i += 2) rows.push(parseInt(h.slice(i, i + 2), 16));
-  parsed.set(ch, rows);
+  // Each row is smeared one column right, which gives every stroke a heavy weight. Rows are 7 bits wide.
+  parsed.set(ch, rows.map((b) => ((b << 1) | b) << 1));
 }
+// A few shapes close up when thickened, so they're drawn by hand at the heavy weight.
+const HEAVY: Record<string, string[]> = {
+  M: ['1100011', '1110111', '1111111', '1101011', '1100011', '1100011', '1100011'],
+  W: ['1100011', '1100011', '1100011', '1101011', '1111111', '1110111', '1100011'],
+  V: ['110011', '110011', '110011', '011110', '011110', '001100', '001100'],
+  G: ['011111', '110000', '110000', '110111', '110011', '110011', '011111'],
+  0: ['011110', '110011', '110011', '110011', '110011', '110011', '011110'],
+  8: ['011110', '110011', '110011', '011110', '110011', '110011', '011110'],
+};
+for (const [ch, rows] of Object.entries(HEAVY)) parsed.set(ch, rows.map((r) => parseInt(r.padEnd(7, '0'), 2)));
 
 /** The glyph bitmaps by character, one number per row. tools/make-font.ts builds the menu font from these. */
 export const GLYPH_ROWS: Record<string, number[]> = Object.fromEntries(parsed);
 
 export const CHAR_H = 7;
-const SPACE_W = 3;
+const SPACE_W = 4;
 
 /**
  * Where a glyph's ink starts, and how wide it is. Letters are as wide as they're drawn, so an I doesn't sit in
@@ -34,10 +45,10 @@ const SPACE_W = 3;
 export function glyphBox(ch: string): { left: number; width: number } {
   if (ch === ' ') return { left: 0, width: SPACE_W };
   const rows = GLYPH_ROWS[ch];
-  if (!rows || (ch >= '0' && ch <= '9')) return { left: 0, width: 5 };
-  let lo = 5;
+  if (!rows || (ch >= '0' && ch <= '9')) return { left: 0, width: 6 };
+  let lo = 7;
   let hi = -1;
-  for (const bits of rows) for (let c = 0; c < 5; c++) if (bits & (16 >> c)) { lo = Math.min(lo, c); hi = Math.max(hi, c); }
+  for (const bits of rows) for (let c = 0; c < 7; c++) if (bits & (64 >> c)) { lo = Math.min(lo, c); hi = Math.max(hi, c); }
   return hi < 0 ? { left: 0, width: SPACE_W } : { left: lo, width: hi - lo + 1 };
 }
 
@@ -58,7 +69,7 @@ export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number,
     for (let r = 0; r < 7; r++) {
       const bits = rows[r];
       if (!bits) continue;
-      for (let c = 0; c < 5; c++) if (bits & (16 >> c)) ctx.fillRect(px + (c - box.left) * scale, py + r * scale, scale, scale);
+      for (let c = 0; c < 7; c++) if (bits & (64 >> c)) ctx.fillRect(px + (c - box.left) * scale, py + r * scale, scale, scale);
     }
     px += (box.width + 1) * scale;
   }

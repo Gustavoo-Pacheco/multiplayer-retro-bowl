@@ -54,7 +54,7 @@ export class Effects {
     for (const q of this.p) {
       if (q.screen) continue;
       ctx.fillStyle = q.color;
-      ctx.fillRect(Math.round(screenX(q.x, cam)), Math.round(screenY(q.y) - 6), q.size, q.size);
+      ctx.fillRect(Math.round(screenX(q.x, cam) / 2) * 2, Math.round((screenY(q.y) - 6) / 2) * 2, Math.max(2, q.size), Math.max(2, q.size));
     }
     void PY;
   }
@@ -64,7 +64,7 @@ export class Effects {
       if (!q.screen) continue;
       ctx.globalAlpha = Math.min(1, (q.max - q.life) * 4);
       ctx.fillStyle = q.color;
-      ctx.fillRect(Math.round(q.x), Math.round(q.y), q.size, q.size);
+      ctx.fillRect(Math.round(q.x / 2) * 2, Math.round(q.y / 2) * 2, Math.max(2, q.size), Math.max(2, q.size));
     }
     ctx.globalAlpha = 1;
   }
