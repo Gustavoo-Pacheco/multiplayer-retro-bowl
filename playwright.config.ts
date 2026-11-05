@@ -10,6 +10,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`,
     viewport: { width: 1280, height: 720 },
+    actionTimeout: 15_000,
   },
   webServer: process.env.E2E_BASE_URL ? undefined : {
     command: `npx vite --port ${PORT} --strictPort`,
