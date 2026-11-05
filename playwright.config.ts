@@ -1,4 +1,8 @@
+import { existsSync, writeFileSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
+
+// Tests need the server's dev operations, which this local-only file turns on.
+if (!existsSync('.dev.vars')) writeFileSync('.dev.vars', 'DEV_TOOLS=1\n');
 
 const PORT = 5199;
 export default defineConfig({

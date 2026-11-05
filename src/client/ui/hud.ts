@@ -19,6 +19,7 @@ export class HudOverlay {
   private pauseBtn: HTMLButtonElement;
   private menuBtn: HTMLButtonElement;
   private menu: HTMLDivElement;
+  private claimBtn: HTMLButtonElement;
 
   constructor(parent: HTMLElement, private a: HudActions) {
     this.root = h('div', { class: 'hud' });
@@ -32,7 +33,9 @@ export class HudOverlay {
     this.buttons = h('div', { class: 'hud-buttons' }, this.audibleBtn, this.timeoutBtn);
     this.dialog = h('div', { class: 'hud-dialog', testid: 'dialog' });
     this.status = h('div', { class: 'hud-status', testid: 'hud-status' });
-    this.root.append(this.buttons, this.pauseBtn, this.menuBtn, this.menu, this.dialog, this.status);
+    this.claimBtn = h('button', { class: 'hud-claim', testid: 'claim-win', onclick: () => a.claim() }, 'CLAIM THE WIN');
+    this.claimBtn.style.display = 'none';
+    this.root.append(this.buttons, this.pauseBtn, this.menuBtn, this.menu, this.dialog, this.status, this.claimBtn);
     parent.append(this.root);
   }
 
@@ -84,6 +87,8 @@ export class HudOverlay {
     if (this.status.textContent !== text) this.status.textContent = text;
     this.status.style.display = text ? '' : 'none';
   }
+
+  setClaim(on: boolean): void { this.claimBtn.style.display = on ? '' : 'none'; }
 
   destroy(): void { this.root.remove(); }
 }

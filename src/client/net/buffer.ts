@@ -10,8 +10,7 @@ export class FrameBuffer {
   /** How many times playback caught up with the newest frame and had to hold. */
   underruns = 0;
   received = 0;
-  /** Largest gap between playback steps with no new frame, in ms. */
-  private lastAdvanceMs = 0;
+  /** The longest time playback held still waiting for a frame, in ms. */
   worstHoldMs = 0;
   private holdStart = 0;
   evPending = 0;
@@ -54,12 +53,12 @@ export class FrameBuffer {
     const maxTicks = T.net.bufferMaxMs * tickPerMs;
     if (newest - this.playTick > maxTicks) this.playTick = newest - wantTicks;
     if (this.playTick >= newest) {
-      if (before < newest) this.underruns += 1;
+      // Frames stop for good when a play ends, so running dry there isn't a stutter.
+      if (before < newest && fr[fr.length - 1].phase !== 'dead') this.underruns += 1;
       this.playTick = newest;
       if (!this.holdStart) this.holdStart = nowMs;
-      this.worstHoldMs = Math.max(this.worstHoldMs, nowMs - this.holdStart);
+      if (fr[fr.length - 1].phase !== 'dead') this.worstHoldMs = Math.max(this.worstHoldMs, nowMs - this.holdStart);
     } else this.holdStart = 0;
-    void this.lastAdvanceMs;
     while (fr.length > 2 && fr[1].tick <= this.playTick) fr.shift();
     const a = fr[0];
     const b = fr[1] ?? fr[0];

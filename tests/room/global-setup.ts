@@ -1,5 +1,6 @@
 // Starts the real local runtime (Vite + workerd) once for all room tests.
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, writeFileSync } from 'node:fs';
 
 export const ROOM_PORT = 5198;
 
@@ -8,6 +9,7 @@ async function up(): Promise<boolean> {
 }
 
 export default async function setup(): Promise<() => void> {
+  if (!existsSync('.dev.vars')) writeFileSync('.dev.vars', 'DEV_TOOLS=1\n');
   let child: ChildProcess | null = null;
   if (!(await up())) {
     child = spawn('npx', ['vite', '--port', String(ROOM_PORT), '--strictPort'], { stdio: 'ignore', detached: true });

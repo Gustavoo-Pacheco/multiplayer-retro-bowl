@@ -80,6 +80,7 @@ export class Session {
   private raf = 0;
   private botChoiceAt = 0;
   private live = false;
+  private wakeLock: WakeLockSentinel | null = null;
 
   constructor(parent: HTMLElement, public net: NetLike, public opts: SessionOpts) {
     this.stage = new Stage(parent);
@@ -97,10 +98,25 @@ export class Session {
       audible: () => this.sendAudible(), timeout: () => this.sendTimeout(), choice: (n) => this.hud.pressChoice(n), pause: () => this.net.send({ t: 'pause' }),
     }));
     this.raf = requestAnimationFrame((t) => this.loop(t));
+    void this.acquireWakeLock();
+    document.addEventListener('visibilitychange', this.onVisible);
+  }
+
+  private onVisible = (): void => { if (!document.hidden) void this.acquireWakeLock(); };
+  private async acquireWakeLock(): Promise<void> {
+    try { this.wakeLock = (await navigator.wakeLock?.request('screen')) ?? null; } catch { /* optional */ }
+  }
+
+  /** The socket came back: anything unconfirmed gets sent again if it's still needed. */
+  onReconnected(): void {
+    this.handoffSent = false;
+    this.resultSent = false;
   }
 
   destroy(): void {
     cancelAnimationFrame(this.raf);
+    void this.wakeLock?.release().catch(() => {});
+    document.removeEventListener('visibilitychange', this.onVisible);
     for (const u of this.unbind) u();
     this.hud.destroy();
     this.stage.destroy();
@@ -238,6 +254,8 @@ export class Session {
     else if (m.live) {
       // A rejoin mid-play. A page that kept its sim carries on; otherwise it watches until the play ends.
       this.live = true;
+      // The server moved control while this page was away: drop the old sim and watch.
+      if (this.sim && !this.opts.local && m.live.controller !== this.seat) { this.sim = null; this.buffer.reset(m.live.playId); }
       if (!this.sim && m.match.play) {
         this.desc = m.match.play;
         const ctx = simContext(m.match);
@@ -406,6 +424,7 @@ export class Session {
     info.field = this.fieldFor(m);
     const camTarget = (this.hasFrame ? f.bx : m.ballX) + (m.attack[m.possession] ?? 1) * T.view.camLead;
     this.cam.follow(camTarget, dtMs / 1000);
+    if (!this.controlling()) info.aimAlpha = 1;
     if (this.hasFrame && this.info) drawScene(ctx, f, info, this.cam.x);
     else { ctx.drawImage(info.field.canvas, Math.round(-(this.cam.x * (640 / 48) + 6 * (640 / 48) - 320)), 0); }
     const live = this.sim && this.sim.phase !== 'pre' ? this.sim.clock : m.clock;
@@ -415,6 +434,7 @@ export class Session {
     const acting = this.actingSeat();
     this.hud.update(m, acting, this.isMyDecision(), this.paused, this.waiting);
     this.hud.setStatus(this.statusText(m));
+    this.hud.setClaim(!this.opts.local && m.phase !== 'final' && this.waitingInfo?.canClaim === this.seat && this.seat !== null);
   }
 
   private placeholderInfo(m: MatchState): SceneInfo {
@@ -453,8 +473,12 @@ export class Session {
     if (this.paused) return `PAUSED${this.pausedBy === this.seat ? '. Tap > to resume' : ''}`;
     if (this.waiting || (this.waitingInfo && this.waitingInfo.missing.some(Boolean) && m.phase !== 'final')) {
       const w = this.waitingInfo;
-      if (w?.canClaim === this.seat) return 'Your rival has not come back.';
-      if (w && !this.opts.local) return `Waiting for your rival to reconnect.`;
+      if (w?.canClaim === this.seat) return 'Your rival has not come back. Keep waiting, or claim the win.';
+      if (w && !this.opts.local) {
+        const rival = this.seat === null ? 0 : (1 - this.seat) as Seat;
+        const left = w.left[rival];
+        return left === null ? 'Waiting for your rival...' : 'Waiting for your rival to reconnect...';
+      }
     }
     return '';
   }

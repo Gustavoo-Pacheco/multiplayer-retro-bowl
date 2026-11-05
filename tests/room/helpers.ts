@@ -1,0 +1,61 @@
+import type { Seat, ServerMsg } from '../../src/shared/protocol';
+import type { MatchState } from '../../src/shared/rules/match';
+import type { MatchConfig } from '../../src/shared/data/config';
+import { joined, newCode, TestClient } from './client';
+
+export interface Pair { a: TestClient; b: TestClient; code: string }
+
+export async function pair(open: TestClient[], cfg: Partial<MatchConfig> = {}, teams: [string, string] = ['SEA', 'LAR']): Promise<Pair & { start: () => Promise<MatchState> }> {
+  const code = newCode();
+  const a = await joined(code, 'Ann', { create: true });
+  const b = await joined(code, 'Bob');
+  open.push(a, b);
+  a.send({ t: 'setConfig', patch: { replays: 'off', ...cfg } });
+  await b.wait('room', (m) => m.room.config.replays === 'off');
+  return {
+    a, b, code,
+    start: async () => {
+      a.send({ t: 'pickTeam', team: teams[0] });
+      b.send({ t: 'pickTeam', team: teams[1] });
+      await a.wait('room', (m) => m.room.seats[1]?.team === teams[1] && m.room.seats[0]?.team === teams[0]);
+      await b.wait('room', (m) => m.room.seats[1]?.team === teams[1] && m.room.seats[0]?.team === teams[0]);
+      a.send({ t: 'ready', ready: true });
+      await a.wait('room', (m) => m.room.seats[0]?.ready === true);
+      b.send({ t: 'ready', ready: true });
+      const r = await a.wait('matchState', (m) => m.match.phase === 'coinToss');
+      await b.wait('matchState', (m) => m.match.phase === 'coinToss');
+      return r.match;
+    },
+  };
+}
+
+export const expire = (c: TestClient, what: string) => c.send({ t: 'dev', op: 'expire', what });
+
+export function clearInbox(...cs: TestClient[]): void { for (const c of cs) c.inbox.length = 0; }
+
+export type MS = Extract<ServerMsg, { t: 'matchState' }>;
+
+/** The newest state either way a client can learn it. */
+export async function waitState(c: TestClient, pred: (m: MatchState) => boolean, ms = 8000): Promise<MatchState> {
+  const until = Date.now() + ms;
+  for (;;) {
+    for (let i = c.inbox.length - 1; i >= 0; i--) {
+      const m = c.inbox[i];
+      if ((m.t === 'matchState' || m.t === 'playStart') && pred(m.match)) { c.inbox.splice(0, i + 1); return m.match; }
+    }
+    if (Date.now() > until) throw new Error(`state not reached; inbox=${JSON.stringify(c.inbox.map((x) => x.t))}`);
+    await new Promise((r) => setTimeout(r, 15));
+  }
+}
+
+/** Runs from the coin toss through any automatic kicks to the first play from scrimmage. */
+export async function toScrimmage(p: Pair): Promise<{ match: MatchState; off: TestClient; def: TestClient; offSeat: Seat }> {
+  expire(p.a, 'banner');
+  const pre = (m: MatchState) => m.phase === 'presnap' && m.play?.type === 'scrimmage';
+  const first = await waitState(p.a, (m) => pre(m) || m.phase === 'kickChoice');
+  if (first.phase === 'kickChoice') (first.kicker === 0 ? p.a : p.b).send({ t: 'choice', c: 'deep' });
+  const m = first.phase === 'kickChoice' ? await waitState(p.a, pre) : first;
+  await waitState(p.b, pre);
+  const offSeat = m.play!.offense;
+  return { match: m, offSeat, off: offSeat === 0 ? p.a : p.b, def: offSeat === 0 ? p.b : p.a };
+}

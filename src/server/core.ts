@@ -80,8 +80,15 @@ export class RoomCore {
     const d = this.data!;
     const live: [boolean, boolean] = [false, false];
     for (const c of this.host.conns()) if (c.seat !== null) live[c.seat] = true;
-    for (const s of SEATS) { const r = d.seats[s]; if (r) { r.online = live[s]; if (!live[s]) r.visible = true; } }
-    this.lastFrameAt = this.host.now();
+    const now = this.host.now();
+    for (const s of SEATS) {
+      const r = d.seats[s];
+      if (!r) continue;
+      r.online = live[s];
+      if (!live[s]) r.visible = true;
+      if (!live[s] && d.screen === 'match' && d.match?.phase !== 'final' && d.dl.reconnect[s] === null) d.dl.reconnect[s] = now + d.config.reconnect * 60000;
+    }
+    this.lastFrameAt = now;
   }
 
   // --- Saving and timers -----------------------------------------------------

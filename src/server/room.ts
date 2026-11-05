@@ -16,7 +16,11 @@ export class Room extends DurableObject<Env> implements RoomHost {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
-    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room(id INTEGER PRIMARY KEY CHECK(id = 1), code TEXT, state TEXT)');
+    this.ensureTable();
+  }
+
+  private ensureTable(): void {
+    this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS room(id INTEGER PRIMARY KEY CHECK(id = 1), code TEXT, state TEXT)');
   }
 
   private conn(ws: WebSocket): Conn {
@@ -38,6 +42,7 @@ export class Room extends DurableObject<Env> implements RoomHost {
 
   private getCore(code?: string): RoomCore {
     if (!this.core) {
+      this.ensureTable();
       const row = this.ctx.storage.sql.exec<{ code: string }>('SELECT code FROM room WHERE id = 1').toArray()[0];
       this.core = new RoomCore(this, row?.code ?? code ?? '');
     }
