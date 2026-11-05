@@ -1,7 +1,7 @@
 // Slingshot aiming, ball flight and the catch check.
 import { DIFFICULTY } from '../data/config';
 import { rnd } from './rng';
-import { clampChance } from './contact';
+import { clampChance, takeBall } from './contact';
 import { endPlay } from './end';
 import { T } from './tuning';
 import { A, EV, type SimPlayer, type SimState } from './state';
@@ -181,15 +181,7 @@ function touchCost(s: SimState): number {
   return T.run.condPerTouchLo + (T.run.condPerTouchHi - T.run.condPerTouchLo) * rnd(s);
 }
 
-/** Replaced at M5 with the full handoff logic in turnover(). */
 function intercept(s: SimState, d: SimPlayer): void {
-  const b = s.ball;
-  b.holder = d.i;
-  b.x = d.x; b.y = d.y;
-  s.possessor = d.seat;
-  s.lastCarrier = d.seat;
-  s.stats[s.desc.offense].int += 1;
   d.anim = A.int;
-  s.ev |= EV.int;
-  beginRun(s);
+  takeBall(s, d, 'int');
 }

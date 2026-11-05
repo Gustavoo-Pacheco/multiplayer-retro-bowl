@@ -18,8 +18,9 @@ type Mode = 'none' | 'pending' | 'aim' | 'run' | 'done';
 
 interface Press { id: number; x0: number; y0: number; t0: number; x: number; y: number; mode: Mode; pendingOn: 'rb' | 'qb' | null; ox: number; oy: number; ot: number; truck: boolean; moved: boolean }
 
-const hit = (p: { x: number; y: number } | null, x: number, y: number): boolean =>
-  !!p && Math.hypot(p.x - x, p.y - 12 - y) <= T.input.touchRadius;
+const dist = (p: { x: number; y: number } | null, x: number, y: number): number =>
+  (p ? Math.hypot(p.x - x, p.y - 12 - y) : 1e9);
+const hit = (p: { x: number; y: number } | null, x: number, y: number): boolean => dist(p, x, y) <= T.input.touchRadius;
 
 export class GestureRecognizer {
   private press: Press | null = null;
@@ -46,9 +47,14 @@ export class GestureRecognizer {
       case 'pre': this.emit({ k: 'snap' }); p.mode = 'done'; break;
       case 'kickPower': case 'kickAim': case 'kickFlight': this.emit({ k: 'tap' }); p.mode = 'done'; break;
       case 'pocket':
-        if (this.ctx.handoffOpen && hit(this.ctx.rb, x, y)) { p.mode = 'pending'; p.pendingOn = 'rb'; }
-        else if (hit(this.ctx.qb, x, y)) { p.mode = 'pending'; p.pendingOn = 'qb'; }
-        else this.beginAim(p);
+        {
+          // Touch targets overlap, so the nearer player wins.
+          const onRb = this.ctx.handoffOpen && hit(this.ctx.rb, x, y);
+          const onQb = hit(this.ctx.qb, x, y);
+          if (onRb && (!onQb || dist(this.ctx.rb, x, y) < dist(this.ctx.qb, x, y))) { p.mode = 'pending'; p.pendingOn = 'rb'; }
+          else if (onQb) { p.mode = 'pending'; p.pendingOn = 'qb'; }
+          else this.beginAim(p);
+        }
         break;
       case 'run': p.mode = 'run'; this.emit({ k: 'tap' }); break;
       default: p.mode = 'none';

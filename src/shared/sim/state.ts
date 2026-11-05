@@ -142,6 +142,9 @@ export interface SimState {
   frozen: boolean;
   autoRun: boolean;
   ezImpetus: boolean;
+  /** Seconds left to run out of the holder's own end zone. No input means a touchback. */
+  ezWait: number;
+  ezRanOut: boolean;
   scrambled: boolean;
   ran: boolean;
   force: '' | 'int' | 'fumble' | 'sack';

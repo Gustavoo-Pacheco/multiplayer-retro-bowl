@@ -15,10 +15,13 @@ export function updateCover(s: SimState, p: SimPlayer, dt: number): void {
   const lag = s.cfg.coverLag;
   const short = s.desc.toGo <= 3;
   const cushion = (short ? T.ai.coverCushionShort : T.ai.coverCushion) + (s.defCall === 'soft' ? T.ai.coverSoftExtra : 0);
-  const tx = rc.x - rc.vx * lag + dir * cushion;
+  let tx = rc.x - rc.vx * lag + dir * cushion;
   const ty = rc.y - rc.vy * lag;
   const speed = p.top * T.ai.coverSpeed;
   const gap = (p.x - rc.x) * dir;
+  // Stay downfield of a receiver who is still coming: hold the spot and let the route arrive.
+  const coming = rc.vx * dir > 1;
+  if (coming && (p.x - tx) * dir > 0) tx = p.x;
   moveTo(p, tx, ty, speed, dt);
   p.anim = gap > T.ai.backpedalUntil * 0.4 && p.vx * dir > 0.5 ? A.backpedal : Math.hypot(p.vx, p.vy) > 0.5 ? A.run : A.stance;
   p.face = gap > 0.5 ? ((-dir) as 1 | -1) : (p.vx >= 0 ? 1 : -1);

@@ -15,7 +15,7 @@ export const T = {
 
   speed: {
     min: 6, max: 9, accel: 20,
-    role: { QB: 0.9, RB: 1, WR: 1, TE: 0.92, OL: 0.7, DL: 0.8, LB: 0.92, DB: 0.98, K: 0.78 } as Record<string, number>,
+    role: { QB: 0.9, RB: 1, WR: 1, TE: 0.92, OL: 0.7, DL: 0.85, LB: 1.0, DB: 1.06, K: 0.78 } as Record<string, number>,
     staminaLoss: 0.15, staminaYards: 70, conditionWeight: 0.12, dropBackSpeed: 4.5,
   },
 
@@ -34,13 +34,14 @@ export const T = {
   },
 
   contact: {
-    radius: 0.85, retryCd: 0.9, missStun: 0.55, hitSlowTime: 0.3, hitSlowMult: 0.75, knockback: 0.6, fallForward: 0.5,
+    radius: 0.85, retryCd: 0.9, missStun: 0.45, hitSlowTime: 0.3, hitSlowMult: 0.75, knockback: 0.6, fallForward: 0.5,
     tackleBase: 0.5, tacklePerAttr: 0.06, behind: 0.2, headOn: -0.1,
     stiff: -0.35, truckFront: -0.25, truckBehind: 0.2,
     fumbleBase: 0.01, fumblePerAttr: 0.004, fumbleLowCond: 0.01, fumbleWet: 0.005, fumbleDive: 0.02, fumbleHighMult: 2,
   },
 
   run: {
+    carryMult: 0.84,
     jukeTime: 0.3, jukeSpeed: 9, jukeForward: 0.8, jukeRepeatWindow: 1.5, jukeRepeatLoss: 0.1, jukeRecover: 1.5,
     stiffRange: 2, stiffAngleCos: 0.5, stiffTime: 0.45, stiffPerStrength: 0.3,
     diveLo: 1, diveHi: 2, diveTime: 0.35, diveSpeed: 7,
@@ -57,7 +58,7 @@ export const T = {
     blitzChance: 0.2, softChance: 0.25,
     rushSpeed: 1, rushShedLo: 0.45, rushShedHi: 0.95, blockStrFactor: 0.05, pushBase: 0.45, pushPerStr: 0.1,
     freeRushSpeedCap: 7.2,
-    pursuitLead: 1.0, pursuitLag: 0.15, pursuitSpeed: 0.97,
+    pursuitLead: 1.0, pursuitLag: 0.15, pursuitSpeed: 1.02,
     blockEngage: 1.1, blockHold: 0.75, blockHoldPerStr: 0.12, blockShedStun: 0.5, blockKeepOff: 0.9, blockFieldRange: 10,
     teSlowBlock: 0.9, separate: 0.55,
     defenderMissAfterJuke: 0.2,
@@ -103,7 +104,7 @@ export const T = {
     aimScale: 0.26, touchTargetMult: 2, touchRadius: 26,
   },
   bot: {
-    holdLo: 0.9, holdHi: 2.3, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.9, leadSteps: 8,
+    holdLo: 1.0, holdHi: 3.2, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.9, leadSteps: 8,
     swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5,
   },
 };

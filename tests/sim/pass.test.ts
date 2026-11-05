@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { encodeFrame, decodeFrame, frameFromSim, FRAME_BYTES } from '../../src/shared/protocol';
-import { tackleChance } from '../../src/shared/sim/contact';
+import { acceptHandoff, tackleChance } from '../../src/shared/sim/contact';
 import { catchChance, interceptChance, maxAimErrorDeg, resolvePass } from '../../src/shared/sim/pass';
 import { step } from '../../src/shared/sim/step';
 import type { SimInput, SimState } from '../../src/shared/sim/state';
@@ -8,7 +8,7 @@ import { T } from '../../src/shared/sim/tuning';
 import { play } from './helpers';
 
 function run(s: SimState, script: Record<number, SimInput[]> = {}, maxTicks = 1200): SimState {
-  for (let i = 0; i < maxTicks && !s.finished; i++) step(s, script[s.tick] ?? []);
+  for (let i = 0; i < maxTicks && !s.finished; i++) { if (s.frozen) acceptHandoff(s); step(s, script[s.tick] ?? []); }
   return s;
 }
 

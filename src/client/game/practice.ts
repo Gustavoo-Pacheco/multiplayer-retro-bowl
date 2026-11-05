@@ -65,7 +65,8 @@ export function startPractice(parent: HTMLElement): void {
   };
   newPlay();
 
-  const dbg = { get sim() { return sim; }, stats, queue, stage,
+  const inputLog: string[] = [];
+  const dbg = { get sim() { return sim; }, stats, queue, stage, inputLog,
     screenOf: (i: number) => {
       const r = stage.canvas.getBoundingClientRect();
       const p = sim.players[i];
@@ -91,6 +92,7 @@ export function startPractice(parent: HTMLElement): void {
     while (acc >= 1 / T.hz) {
       acc -= 1 / T.hz;
       const inputs = [...g.drain(), ...queue.splice(0)];
+      for (const i of inputs) inputLog.push(i.k);
       step(sim, inputs);
       if (sim.result && !stats.ends[playNo - 1]) {
         stats.plays += 1;

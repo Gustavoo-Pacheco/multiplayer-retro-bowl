@@ -27,7 +27,7 @@ function baseState(desc: PlayDesc, cfg: SimCfg): Omit<SimState, 'players' | 'bal
     pass: null, kick: null,
     g: { jukeT: 0, jukeDir: 0, lastJukeAt: -9, jukeLoss: 0, stiffT: 0, stiffsLeft: 0, diveT: 0, diveGain: 0, slowT: 0, truck: false, truckMeter: 0, hitSlowT: 0, lastGestureAt: -9, ballT: 0 },
     defCall: 'man',
-    handoff: null, frozen: false, autoRun: false, ezImpetus: false, scrambled: false, ran: false,
+    handoff: null, frozen: false, autoRun: false, ezImpetus: false, ezWait: 0, ezRanOut: false, scrambled: false, ran: false,
     force: '', forceRecover: -1, ev: 0, result: null, deadT: 0, finished: false,
     stats: [emptyStats(), emptyStats()], touches: [], armFatigue: [0, 0], injury: null, catchX: 0, note: '',
   };
@@ -105,6 +105,12 @@ export function createScrimmage(desc: PlayDesc, teams: SimTeams, cfg: SimCfg): S
   };
   players[0].job = 'qb';
   players[1].job = 'mesh';
+  if (play.rb !== 'block') {
+    const side = players[1].y >= CY ? 1 : -1;
+    const rr = buildRoute(play.rb, players[1].x, players[1].y, dir, side);
+    players[1].route = rr.pts;
+    players[1].routeStop = rr.stop;
+  }
   assign(2, play.wr1, -dir);
   assign(3, play.wr2, dir);
   assign(4, play.te, dir);

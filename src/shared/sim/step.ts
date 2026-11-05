@@ -1,8 +1,8 @@
 // One 60 Hz tick of the play simulation.
 import { T } from './tuning';
-import { checkContact } from './contact';
+import { checkContact, updateChaser, updateLoose } from './contact';
 import { release, startAim, updateFlight } from './pass';
-import { updateCarrier } from './run';
+import { applySwipe, doHandoff, doQbRun, updateCarrier } from './run';
 import { updateBlocker } from './ai/blocking';
 import { updateCover, updateDeep, updateZone } from './ai/coverage';
 import { moveTo, stopMoving } from './ai/move';
@@ -23,6 +23,17 @@ function applyInput(s: SimState, inp: SimInput): void {
     case 'bullet': if (s.aim.on && s.cfg.bullet) s.aim.bullet = true; break;
     case 'throw': if (s.phase === 'pocket') release(s); break;
     case 'aimCancel': s.aim.on = false; break;
+    case 'handoff': doHandoff(s); break;
+    case 'qbRun': doQbRun(s); break;
+    case 'swipe': applySwipe(s, inp.dx, inp.dy); break;
+    case 'truck': {
+      if (s.phase === 'run' && s.cfg.trucking && s.ball.holder >= 0 && s.players[s.ball.holder].seat === s.control) s.g.truck = inp.on;
+      else if (!inp.on) s.g.truck = false;
+      break;
+    }
+    case 'tap':
+      if (s.phase === 'run' && s.ezWait > 0 && s.players[s.ball.holder]?.seat === s.control) { s.ezWait = 0; s.ezRanOut = true; s.g.lastGestureAt = s.t; }
+      break;
     default: break;
   }
 }
@@ -59,7 +70,11 @@ function updatePlayer(s: SimState, p: SimPlayer, dt: number): void {
   }
   switch (p.job) {
     case 'qb': updateQb(s, p, dt); break;
-    case 'mesh': stopMoving(p, dt); p.anim = A.stance; break;
+    case 'mesh':
+      if (s.phase === 'pre' || s.phaseT < T.pocket.handoffWindow) { stopMoving(p, dt); p.anim = A.stance; }
+      else if (p.route) p.job = 'route';
+      else p.job = 'block';
+      break;
     case 'route': updateRoute(s, p, dt); break;
     case 'block': updateBlocker(s, p, dt); break;
     case 'rush': if (s.phase === 'pocket') updateRush(s, p, dt); else updatePursuit(s, p, dt); break;
@@ -69,6 +84,7 @@ function updatePlayer(s: SimState, p: SimPlayer, dt: number): void {
     case 'carry': updateCarrier(s, p, dt); break;
     case 'lead': updateBlocker(s, p, dt); break;
     case 'pursue': updatePursuit(s, p, dt); break;
+    case 'chase': updateChaser(s, p, dt); break;
     default: stopMoving(p, dt); p.anim = A.stance;
   }
 }
@@ -80,7 +96,7 @@ function separate(s: SimState): void {
     const a = s.players[i];
     for (let j = i + 1; j < n; j++) {
       const b = s.players[j];
-      if (i === s.ball.holder || j === s.ball.holder) continue;
+      if (a.seat !== b.seat || i === s.ball.holder || j === s.ball.holder) continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const d2 = dx * dx + dy * dy;
@@ -115,8 +131,10 @@ export function step(s: SimState, inputs: readonly SimInput[] = []): void {
   if (s.phase === 'pre') return;
 
   if (s.phase === 'flight') updateFlight(s, dt);
+  else if (s.phase === 'loose') updateLoose(s, dt);
+  if (s.frozen) return;
   for (const p of s.players) {
-    if (isDead(s)) return;
+    if (isDead(s) || s.frozen) return;
     updatePlayer(s, p, dt);
   }
   if (isDead(s)) return;

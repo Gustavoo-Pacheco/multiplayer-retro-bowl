@@ -44,7 +44,7 @@ export function updateBlocker(s: SimState, p: SimPlayer, dt: number): void {
   if (Math.hypot(r.x - p.x, r.y - p.y) < T.ai.blockEngage && r.engaged < 0) {
     r.engaged = p.i;
     p.engaged = r.i;
-    r.shed = rollShed(s, r, p);
+    r.shed = s.phase === 'pocket' ? rollShed(s, r, p) : s.t + Math.max(0.2, T.ai.blockHold + T.ai.blockHoldPerStr * (Math.max(p.blk, p.str) - r.str));
     p.anim = A.block;
   }
 }
