@@ -7,7 +7,7 @@ const clipped = (p: Page) => p.evaluate(() => {
   const bad: string[] = [];
   const shown = '.team-nick, .team-stats, .seat-card .scores, .seat-card .ready-word, .seat-nick, .cfg-row, .cfg-label';
   for (const el of document.querySelectorAll<HTMLElement>(shown)) {
-    if (el.scrollWidth > el.clientWidth + 1) bad.push(`cut off: ${el.textContent}`);
+    if (el.scrollWidth > el.clientWidth) bad.push(`cut off: ${el.textContent}`);
   }
   for (const el of document.querySelectorAll<HTMLElement>('.team-card')) {
     const box = el.getBoundingClientRect();

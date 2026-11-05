@@ -17,6 +17,7 @@ import { buildField } from '../render/field';
 import { drawScene, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
 import { Camera, screenX, screenY } from '../render/view';
+import { mountDevPanel } from '../ui/dev-panel';
 import { h } from '../ui/dom';
 
 export function startPractice(parent: HTMLElement): void {
@@ -63,6 +64,7 @@ export function startPractice(parent: HTMLElement): void {
     banner.textContent = 'Tap to snap';
   };
   newPlay();
+  if (params.has('dev')) mountDevPanel(stage.overlay, { force: (what) => { sim.force = what; } });
 
   const inputLog: string[] = [];
   const dbg = { get sim() { return sim; }, stats, queue, stage, inputLog,

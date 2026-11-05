@@ -1,12 +1,12 @@
 # Borg Bowl
 
-A private two-player American football game for phones and desktop browsers. One player creates a room and sends the link. Whoever has the ball plays it, the other watches, and the computer plays defense for both. An interception or lost fumble hands control to the other player mid-play.
+A private two-player American football game for phones and desktop browsers, drawn in an original retro pixel style. One player creates a room and sends the link. Whoever has the ball plays it, the other watches, and the computer plays defense for both. An interception or lost fumble hands control to the other player mid-play.
 
 It runs on Cloudflare's free plan: a Worker, plus one Durable Object per room. There are no runtime libraries.
 
 ## Run it
 
-You need Node 22 or later.
+You need Node 22.12 or later, which is what Vite and Wrangler ask for. This was built and tested on Node 25.
 
 ```sh
 npm install
@@ -23,14 +23,24 @@ Open the address it prints, then open the invite link in a second window to play
 | `/?practice=1` | Repeated pass plays, with no rules or clock |
 | `/dev/sprites` | Every sprite in every team's colours |
 
-Add `?dev=1` to any match address for the tuning panel and debug buttons. Add `&bot=1` to let a bot play your side, and `&speed=4` to run the sim faster.
+Add `?dev=1` to a match or practice address for the developer panel, opened with the DEV button. Add `&bot=1` to let a bot play your side, and `&speed=4` to run the sim faster.
+
+| In the panel | What it does |
+| --- | --- |
+| Number list | Edits any value in `tuning.ts` live, with a filter, Reset and Copy changes. Edits stay in that browser until a reload |
+| Bot | Switches the bot on or off for your side |
+| Interception, Fumble, Sack | Forces that event on your plays with the ball, and stays on until it happens |
+| Low clock | Sets the game clock to 0:15. The room server does this, so a deployed copy refuses it |
+| Download last play | Saves that play's frames and state as JSON, for bug reports |
+
+In an online room, tuning edits change only your own browser. The room's timers keep their saved values, since those run on the server.
 
 ## Test it
 
 ```sh
 npm run typecheck       # Strict TypeScript across the whole project
 npm test                # Rules, simulation, balance, art and room tests
-npm run test:e2e        # Real browsers, with added network delay. Saves screens into screenshots/
+npm run test:e2e        # Chromium, with added network delay. Saves screens into screenshots/
 npm run balance         # Prints bot statistics for the balance targets
 ```
 
@@ -39,10 +49,10 @@ npm run balance         # Prints bot statistics for the balance targets
 To run the browser tests against a deployed copy:
 
 ```sh
-E2E_BASE_URL=https://borg-bowl.<your-subdomain>.workers.dev npx playwright test tests/e2e/m4-online.spec.ts
+E2E_BASE_URL=https://borg-bowl.<your-subdomain>.workers.dev npx playwright test tests/e2e/m4-online.spec.ts tests/e2e/m8-dev.spec.ts
 ```
 
-Tests that use server debug operations can't run against production, because the debug operations are off there. `m4-online.spec.ts` plays a full game with a disconnect and a reload, and needs none of them.
+`m4-online.spec.ts` plays a full game with a disconnect and a reload, and `m8-dev.spec.ts` includes a check that the server refuses debug operations. Both need only the public game. Other specs can't run against production, because they use server debug operations, which are off there.
 
 ## Deploy it
 
@@ -73,7 +83,7 @@ src/client/game/    Controller and watcher loop, replays, presentation
 src/client/render/  Stadium, scene, overlays, effects, HUD
 src/client/art/     Sprites: body grids, poses as joints, recolouring
 src/client/audio/   Synthesized sound effects and a step sequencer for music
-src/client/ui/      Lobby, menus, player settings, final screen
+src/client/ui/      Lobby, menus, player settings, final screen, developer panel
 tools/balance.ts    Bot statistics
 tools/make-font.ts  Builds the menu font from the game's bitmap glyphs
 ```
@@ -81,7 +91,8 @@ tools/make-font.ts  Builds the menu font from the game's bitmap glyphs
 - **Network model:** the player with the ball runs the sim in their browser and streams 118-byte frames at 20 Hz. The room relays them without reading them. The watcher buffers about 150 ms and smooths between frames.
 - **Handoff:** on a turnover the full sim state goes to the room, which either gives control to the other player or tells the sender to carry on with an auto-runner.
 - **Trust:** browsers are trusted, with basic server checks. This is a game among friends.
-- **Tuning:** every number lives in `src/shared/sim/tuning.ts`, and the `?dev=1` panel edits it live.
+- **Tuning:** every tunable number lives in `src/shared/sim/tuning.ts`, and the `?dev=1` panel edits it live.
+- **Art:** sprites come from a few body grids, with poses written as joints, drawn at half size and doubled for chunky pixels. All art is original to this game, and `screenshots/` shows every screen.
 
 `DECISIONS.md` records each gap in the plan and the choice made. `SETTINGS.md` lists what checks each match setting.
 

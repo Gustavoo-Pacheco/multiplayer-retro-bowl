@@ -4,15 +4,11 @@ import { NetProxy } from './proxy';
 
 export interface Player { page: Page; browser: Browser; proxy: NetProxy; errors: string[]; base: string }
 
-export function targetPort(baseURL: string | undefined): number {
-  return Number(new URL(baseURL ?? 'http://localhost:5199').port || 80);
-}
-
 export const DESKTOP = { width: 1280, height: 720, touch: false };
 export const PHONE = { width: 844, height: 390, touch: true };
 
 export async function player(baseURL: string | undefined, view = DESKTOP): Promise<Player> {
-  const proxy = await new NetProxy(targetPort(baseURL)).start();
+  const proxy = await new NetProxy(baseURL ?? 'http://localhost:5199').start();
   const browser = await chromium.launch();
   const base = `http://localhost:${proxy.port}`;
   const ctx = await browser.newContext({ baseURL: base, viewport: { width: view.width, height: view.height }, hasTouch: view.touch, isMobile: view.touch, deviceScaleFactor: view.touch ? 2 : 1 });

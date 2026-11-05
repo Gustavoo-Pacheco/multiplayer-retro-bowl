@@ -46,3 +46,8 @@ Gaps in the plan, and the simplest choice made for each.
 | 40 | Look of the game | Requested look: the feel of retro 16-bit football games. All sprites, menus, fonts and score displays are original drawings for Borg Bowl, with no art, layouts or logos copied from any other game | Another game's art is its publisher's copyright, while a general retro style is free to use |
 | 41 | Chunky pixels | Sprites, field lines and particles sit on a 2-pixel grid inside the 640 x 360 canvas, rather than a smaller canvas | Input, camera and layout all stay as they were, and only the drawing changes |
 | 42 | Sprite cell | 48 by 42 screen pixels, made from a 24 by 21 art grid. Replaces the 44 by 34 cell in row 29 | The chunkier figures need room for raised arms and jumps |
+| 43 | Forced events | A forced interception, fumble or sack stays armed until it really happens | A forced pass can still fall incomplete. If the button were used up by a play that missed, it would look broken |
+| 44 | Forced sack | The tackle always lands, can't become a fumble, and a bot holds the ball until it comes | The plan names the button but not how sure it must be |
+| 45 | Tuning in online rooms | Panel edits change only that browser | The room server has its own copy of the numbers, and dev operations are off in production |
+| 46 | Live test path | The test proxy can also reach an https address, so the same specs run against a deployed copy with delay and drops | Otherwise the live test couldn't add delay or cut connections |
+| 47 | Browsers tested | Chromium only, including its phone emulation, at the owner's request | Firefox, Safari and real phones remain manual checks |

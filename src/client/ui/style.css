@@ -140,3 +140,15 @@ button.small { padding:3px 8px; }
 .help-table { width:100%; border-collapse:collapse; }
 .help-table th { text-align:left; color:var(--accent); padding:2px 8px 2px 0; font-weight:400; }
 .help-table td { padding:2px 8px 2px 0; }
+
+.dev-toggle { position:absolute; left:calc(var(--u) * 6); top:calc(var(--u) * 30); z-index:31; font:400 calc(var(--u) * 8)/1.1 var(--font); padding:calc(var(--u) * 2) calc(var(--u) * 4); }
+.dev-panel { display:none; position:absolute; top:0; right:0; bottom:0; width:min(460px,70%); z-index:30; flex-direction:column; gap:6px; padding:8px; background:var(--bg); border-left:4px solid var(--edge); pointer-events:auto; font-size:16px; }
+.dev-panel.open { display:flex; }
+.dev-buttons { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+.dev-buttons input { padding:3px 6px; width:8em; flex:1 1 auto; }
+.dev-list { flex:1 1 0; min-height:0; overflow-y:auto; touch-action:pan-y; }
+.dev-line { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:1px 0; }
+.dev-line span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dev-line input { width:6em; flex:none; padding:1px 4px; }
+.dev-line input.changed { border-color:var(--accent); color:var(--accent); }
+@media (max-height:520px) { .dev-panel { font-size:12px; gap:3px; padding:4px; } }

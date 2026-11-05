@@ -104,6 +104,7 @@ export const T = {
     pause: 60000, watchdog: 5000, watchdogTick: 1000, cleanup: 2 * 3600 * 1000, handoffBanner: 600,
     choiceDefaultGrace: 300,
   },
+  dev: { lowClock: 15, forceHoldInt: 0.6, forceHoldSack: 99 },
   replay: { rate: 0.8, bufferFrames: 1200 },
   fx: { trail: 14, exciteBigPlay: 2500, exciteTouchdown: 4500, exciteFieldGoal: 3000, fireworkScore: 800, fireworkWin: 500, confettiWin: 160, helpedFor: 4000, helpedWalk: 450, particleCap: 400 },
   net: {

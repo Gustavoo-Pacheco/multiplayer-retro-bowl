@@ -26,6 +26,7 @@ import { drawBanner, drawKickMeter, drawScoreboard, drawWeather } from '../rende
 import { drawScene, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
 import { Camera, screenX, screenY } from '../render/view';
+import { devTuningChanges, mountDevPanel, type DevPanel, type ForceKind } from '../ui/dev-panel';
 import { HudOverlay } from '../ui/hud';
 import { openHelp, openPrefs } from '../ui/panels';
 import { applyFullscreen, prefs } from '../ui/prefs';
@@ -96,6 +97,8 @@ export class Session {
   private live = false;
   private shadow: SimState | null = null;
   private wakeLock: WakeLockSentinel | null = null;
+  private devPanel: DevPanel | null = null;
+  private armedForce: ForceKind | null = null;
 
   constructor(parent: HTMLElement, public net: NetLike, public opts: SessionOpts) {
     this.stage = new Stage(parent);
@@ -113,6 +116,14 @@ export class Session {
       input: (i) => { if (this.controlling()) this.queue.push(i); },
       audible: () => this.sendAudible(), timeout: () => this.sendTimeout(), choice: (n) => this.hud.pressChoice(n), pause: () => this.net.send({ t: 'pause' }),
     }));
+    if (opts.dev) {
+      this.devPanel = mountDevPanel(this.stage.overlay, {
+        bot: { get: () => this.opts.bot, set: (on) => { this.opts.bot = on; } },
+        force: (what) => { this.armedForce = what; },
+        lowClock: () => this.setLowClock(),
+        download: () => this.downloadLastPlay(),
+      });
+    }
     this.raf = requestAnimationFrame((t) => this.loop(t));
     void this.acquireWakeLock();
     document.addEventListener('visibilitychange', this.onVisible);
@@ -141,8 +152,50 @@ export class Session {
     document.removeEventListener('visibilitychange', this.onVisible);
     audio.setCrowd(false);
     for (const u of this.unbind) u();
+    this.devPanel?.destroy();
     this.hud.destroy();
     this.stage.destroy();
+  }
+
+  /** A forced event stays armed until it really happens, since a forced pass can still fall incomplete. A bot is steered into it too. */
+  private applyForce(): void {
+    const s = this.sim;
+    const what = this.armedForce;
+    if (!what || !s || !this.controlling()) return;
+    const stat = what === 'int' ? 'int' : what === 'fumble' ? 'fumLost' : 'sacks';
+    if (s.stats[0][stat] + s.stats[1][stat] > 0) { this.armedForce = null; return; }
+    if (s.desc.type !== 'scrimmage' || s.phase !== 'pre' || s.force === what) return;
+    s.force = what;
+    if (this.opts.bot) {
+      this.bot.playId = s.desc.id;
+      this.bot.plan = what === 'fumble' ? 'run' : 'pass';
+      this.bot.holdUntil = what === 'sack' ? T.dev.forceHoldSack : T.dev.forceHoldInt;
+    }
+  }
+
+  private setLowClock(): void {
+    const m = this.match;
+    if (!m) return;
+    const clock = T.dev.lowClock;
+    if (this.sim) this.sim.clock = clock;
+    this.net.send({ t: 'dev', op: 'patch', patch: { clock, play: m.play ? { ...m.play, clock } : m.play } });
+  }
+
+  /** Saves the play's frames and state, for bug reports. */
+  private downloadLastPlay(): void {
+    const data = {
+      savedAt: new Date().toISOString(), seat: this.seat, match: this.match, desc: this.desc ?? this.sim?.desc ?? null,
+      sim: this.sim, frames: this.pres.replay.frames, tuning: devTuningChanges(), stats: this.stats, log: this.log.slice(-50),
+    };
+    const text = JSON.stringify(data, (_k, v: unknown) => (ArrayBuffer.isView(v) ? Array.from(v as unknown as ArrayLike<number>) : v));
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `borg-bowl-play-${this.match?.playId ?? 0}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   controlling(): boolean { return !!this.sim && (this.opts.local || this.sim.control === this.seat); }
@@ -177,6 +230,7 @@ export class Session {
       case 'welcome': this.seat = m.seat; break;
       case 'room': this.room = m.room; break;
       case 'playStart': this.onPlayStart(m.play, m.match, m.pc); break;
+      case 'error': if (m.msg === 'dev tools off') this.devPanel?.note('The server refused: its dev tools are off.'); break;
       case 'matchState': this.onMatchState(m); break;
       case 'snap': this.onSnap(m); break;
       case 'handoff': this.onHandoffToMe(m); break;
@@ -357,6 +411,7 @@ export class Session {
     this.syncGestures();
     this.gestures.tick(now);
     this.botDecisions(now);
+    this.applyForce();
     const s = this.sim;
     if (this.shadow) this.tickShadow(dtMs, now);
     else if (s && this.controlling()) {
@@ -519,7 +574,7 @@ export class Session {
       else if (sim.phase === 'kickAim') bottom = 'TAP AS THE ARROW CROSSES THE MIDDLE';
       else if (sim.phase === 'pocket') bottom = sim.aim.on ? 'RELEASE TO THROW' : 'DRAG BACK TO AIM';
       else if (sim.ezWait > 0) bottom = 'TAP TO RUN IT OUT';
-    } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && m.phase !== 'final' && !mine) {
+    } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && m.phase !== 'final' && m.phase !== 'replay' && !mine) {
       bottom = `WATCHING: ${TEAM_BY_ID[m.teams[this.controllerOf(m)]].id} ON OFFENSE`;
     }
     const c = this.pres.commentary;

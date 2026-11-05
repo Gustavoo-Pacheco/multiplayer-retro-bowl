@@ -58,11 +58,12 @@ export function checkContact(s: SimState, dt: number): boolean {
     const truck = s.g.truck && s.cfg.trucking;
     const p = tackleChance(d.tck, r.str, from, stiff, truck);
     s.ev |= EV.grunt;
-    if (rnd(s) < p) {
+    const forcedSack = s.force === 'sack' && s.phase === 'pocket';
+    if (rnd(s) < p || forcedSack) {
       addTouch(s, r);
       s.ev |= EV.tackle;
       const fChance = fumbleChance(r.cat, r.cond < 0.5, s.cfg.weather === 'rain' || s.cfg.weather === 'snow', diving, s.cfg.fumbleMult);
-      if (s.force === 'fumble' || rnd(s) < fChance) { fumble(s, r, d); return true; }
+      if (s.force === 'fumble' || (!forcedSack && rnd(s) < fChance)) { fumble(s, r, d); return true; }
       const n = dist || 1;
       const ux = (r.x - d.x) / n;
       const fall = from === 'behind' ? T.contact.fallForward * dirSign : ux * T.contact.knockback;

@@ -1,5 +1,7 @@
 // A TCP proxy for one test player: adds real network delay and can cut the connection.
+// It also reaches a deployed https address, so the same tests can run against the live game.
 import net from 'node:net';
+import tls from 'node:tls';
 
 interface Chunk { at: number; data: Buffer }
 
@@ -36,11 +38,34 @@ export class NetProxy {
   private blocked = false;
   port = 0;
 
-  constructor(private targetPort: number) {}
+  private host: string;
+  private targetPort: number;
+  private secure: boolean;
+  /** The target's own name, sent in place of the local proxy's, which a real server wouldn't recognise. */
+  private hostHeader: string;
+
+  constructor(target: string) {
+    const u = new URL(target);
+    this.host = u.hostname;
+    this.secure = u.protocol === 'https:';
+    this.targetPort = Number(u.port || (this.secure ? 443 : 80));
+    this.hostHeader = u.host;
+  }
+
+  private dial(): net.Socket {
+    return this.secure ? tls.connect({ host: this.host, port: this.targetPort, servername: net.isIP(this.host) ? undefined : this.host }) : net.connect(this.targetPort, this.host);
+  }
+
+  /** Requests start at the beginning of a chunk here, as they're short and sent whole. */
+  private rewrite(b: Buffer): Buffer {
+    if (!/^(GET|HEAD|POST|PUT|DELETE|OPTIONS) /.test(b.toString('latin1', 0, 8))) return b;
+    const text = b.toString('latin1').replace(/\r\nHost: [^\r]*/i, `\r\nHost: ${this.hostHeader}`).replace(/\r\nOrigin: [^\r]*/i, `\r\nOrigin: ${this.secure ? 'https' : 'http'}://${this.hostHeader}`);
+    return Buffer.from(text, 'latin1');
+  }
 
   async start(): Promise<this> {
     this.server = net.createServer((client) => {
-      const up = net.connect(this.targetPort, 'localhost');
+      const up = this.dial();
       const pair = [client, up];
       const toUp = new Pipe(up, () => this.oneWay, () => this.jitterMs);
       const toClient = new Pipe(client, () => this.oneWay, () => this.jitterMs);
@@ -55,7 +80,7 @@ export class NetProxy {
             for (const s of pair) this.socks.add(s);
           }
         }
-        toUp.push(b);
+        toUp.push(this.rewrite(b));
       });
       up.on('data', (d) => toClient.push(d as Buffer));
       const end = () => { client.destroy(); up.destroy(); this.socks.delete(client); this.socks.delete(up); this.all.delete(client); this.all.delete(up); };

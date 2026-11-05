@@ -21,9 +21,9 @@ test('repeated pass plays by mouse', async ({ page }) => {
   expect(stats.att).toBeGreaterThanOrEqual(4); // a sack before release is allowed
 });
 
-test('repeated pass plays by touch', async () => {
+test('repeated pass plays by touch', async ({ baseURL }) => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ ...devices['iPhone 13 landscape'], baseURL: 'http://localhost:5199' });
+  const ctx = await browser.newContext({ ...devices['iPhone 13 landscape'], baseURL });
   const page = await ctx.newPage();
   await page.goto('/?practice=1');
   await page.waitForFunction(() => !!(window as any).__practice);

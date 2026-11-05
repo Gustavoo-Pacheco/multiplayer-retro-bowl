@@ -103,6 +103,7 @@
   .team-stats { gap:1px; font-size:12px; }
   .stat-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
   .team-nick { font-size:12px; }
+  .team-nick.tight { letter-spacing:-1.2px; }
 }
 
 /* Phones held sideways */

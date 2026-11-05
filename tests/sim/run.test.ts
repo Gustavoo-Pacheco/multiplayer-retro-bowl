@@ -299,3 +299,19 @@ describe('bot play', () => {
     }
   });
 });
+
+describe('debug forces', () => {
+  it('a forced sack lands on a QB who holds the ball, with no fumble', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = play({ seed: seed * 7919 });
+      s.force = 'sack';
+      stepN(s, 2, [{ k: 'snap' }]);
+      let n = 0;
+      while (!s.finished && n++ < 60 * 30) step(s, []);
+      expect(s.finished, `seed ${seed}`).toBe(true);
+      expect(s.result?.sack, `seed ${seed}`).toBe(true);
+      expect(s.stats[s.desc.offense].fumLost, `seed ${seed}`).toBe(0);
+    }
+  });
+});
+

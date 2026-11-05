@@ -1,9 +1,9 @@
 import { chromium, devices, expect, test, type Page } from '@playwright/test';
 
 /** Every runner gesture, on a phone-sized touch screen, using real touch events. */
-test('every gesture works by touch on a phone', async () => {
+test('every gesture works by touch on a phone', async ({ baseURL }) => {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'], baseURL: 'http://localhost:5199' });
+  const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'], baseURL });
   const page = await ctx.newPage();
   await page.goto('/?practice=1');
   await page.waitForFunction(() => !!(window as any).__practice);
