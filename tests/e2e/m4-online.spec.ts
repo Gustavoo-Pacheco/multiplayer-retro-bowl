@@ -82,9 +82,9 @@ test('lobby: a guest sees settings read-only, changes clear Ready, sorting works
 
     await b.page.getByTestId('tab-teams').click();
     await b.page.getByTestId('sort-off').click();
-    await expect(b.page.locator('.team-row').first()).toContainText('Los Angeles Rams');
+    await expect(b.page.locator('.team-card').first()).toContainText('Los Angeles Rams');
     await b.page.getByTestId('sort-def').click();
-    await expect(b.page.locator('.team-row').first()).toContainText('Seattle Seahawks');
+    await expect(b.page.locator('.team-card').first()).toContainText('Seattle Seahawks');
 
     await a.page.getByTestId('tab-teams').click();
     await pickAndReady(a, b, 'SEA', 'SEA');
