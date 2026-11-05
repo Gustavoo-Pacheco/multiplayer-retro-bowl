@@ -16,7 +16,7 @@ Gaps in the plan, and the simplest choice made for each.
 | 10 | Arm fatigue cap | Capped at 25% of range | An uncapped arm could lose half its range in a long game, which ends the passing game |
 | 11 | Dropped controller after a kick handoff | The ball is spotted at the landing point, or a touchback if that's in the end zone | The plan covers turnovers but not kicks |
 | 12 | Rematch | Either player can press it | Simplest reading of 'Rematch keeps the room and settings' |
-| 13 | Dev tools in production | `?dev=1` client tools ship, while server dev operations need `DEV_TOOLS=1`, which production never sets | The plan asks for dev tools. A friend's browser mustn't be able to force a result on a live server |
+| 13 | Dev tools in production | `?dev=1` client tools ship, while server dev operations need `DEV_TOOLS=1`, which production never sets | The plan asks for dev tools. The live server refuses its own dev operations, such as changing the clock. The panel's tuning and force buttons still work on a live game, because the controlling browser runs the play, so this relies on players being friends |
 | 14 | Dropped controller with a hidden page | Voids the play, like a closed socket | Their browser may be throttled and can't be relied on to finish it |
 | 15 | Pause resume | Restarts a full play clock | Fairer than resuming a nearly spent clock, and simplest |
 | 16 | Kick handoff picture | The kicker's screen keeps its own copy running at 0.6 speed until the receiver's frames catch up | The plan asks for no freeze on kicks. Rewinding the picture would look wrong |
