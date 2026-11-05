@@ -30,3 +30,16 @@ Gaps in the plan, and the simplest choice made for each.
 | 24 | `.dev.vars` | Created by the test setup if missing | Tests need `DEV_TOOLS=1`, and the file is gitignored |
 | 25 | Reconnect during a banner | A banner plays to the end, then the match waits at the next dead ball | Banners cost nothing, and a frozen banner looks like a crash |
 | 26 | Refused pauses | A pause with none left is ignored with no error, and the button is disabled | Nothing useful to tell the player that the button doesn't |
+| 27 | 'All scores' replays | Big plays, plus every other score, including extra points and safeties | The plan names the option but not what it includes |
+| 28 | Score banners | Touchdown, field goal, safety and two-point banners show whatever the replay setting is | The setting is about replays. Removing the banner too would make scores easy to miss |
+| 29 | Sprite cell | 44 by 34 pixels, with poses written as joints and limbs drawn as lines | A test caught long limbs passing the plan's smaller cell. Joints keep the art compact, as asked |
+| 30 | Sprite outline | Every figure has a dark outline | Blue players disappeared against a blue end zone without one |
+| 31 | Replay length and speed | The last 4.8 seconds or so of the play, at 0.8 speed | The plan asks for a short replay from saved frames, without a length |
+| 32 | Bots and replays | A bot presses skip straight away | Otherwise automated games wait on every replay. People still see them |
+| 33 | Menu font | `tools/make-font.ts` builds a font file from the canvas font's glyphs. Letters are proportional and digits are all one width | A fixed-width font left gaps such as 'JOI N'. One set of glyphs keeps menus and game alike, and using no outside font fits the no-library rule |
+| 34 | Sound button | The lobby's Sound button opens the player settings panel | Volume, music, name tags and star markers then live in one place |
+| 35 | Injured player | The player walks off with a helper, drawn over the next few seconds. The next play doesn't wait for them | The plan asks for a visible injury without a length. It only affects the picture |
+| 36 | Indoor stadium | In clear weather, the seed sometimes gives a roof truss instead of sky | It adds variety without a setting, and rain or snow always shows open sky |
+| 37 | Music | Only on the title, lobby and halftime screens | The plan rules out music during plays, and lobby waiting is otherwise silent |
+| 38 | Crowd | Filtered noise, with swells on big plays | The plan asks for this, and it needs no audio files |
+| 39 | Title field | The title screen's field leaves out the midfield team letters | The panel sits over them and left two stray letters showing |

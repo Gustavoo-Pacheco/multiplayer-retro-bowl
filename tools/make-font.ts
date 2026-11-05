@@ -1,7 +1,7 @@
 // Builds the menu font from the same 5 x 7 glyphs the canvas uses, so the whole game shares one typeface.
 // Run with: npx tsx tools/make-font.ts
 import { writeFileSync } from 'node:fs';
-import { GLYPH_ROWS } from '../src/client/render/font';
+import { glyphBox, GLYPH_ROWS } from '../src/client/render/font';
 
 const UNIT = 100; // One font pixel, in font units.
 const EM = UNIT * 8;
@@ -25,8 +25,8 @@ function checksum(b: number[]): number {
   return sum;
 }
 
-/** Each lit run in a row becomes one rectangle. Rows that overlap simply add up, which renders the same. */
-function rectsFor(rows: number[]): [number, number, number, number][] {
+/** Each lit run in a row becomes one rectangle, moved left so the glyph's ink starts at zero. */
+function rectsFor(rows: number[], left: number): [number, number, number, number][] {
   const out: [number, number, number, number][] = [];
   rows.forEach((bits, r) => {
     let c = 0;
@@ -34,7 +34,7 @@ function rectsFor(rows: number[]): [number, number, number, number][] {
       if (!(bits & (16 >> c))) { c++; continue; }
       const start = c;
       while (c < 5 && bits & (16 >> c)) c++;
-      out.push([start * UNIT, (6 - r) * UNIT, c * UNIT, (7 - r) * UNIT]);
+      out.push([(start - left) * UNIT, (6 - r) * UNIT, (c - left) * UNIT, (7 - r) * UNIT]);
     }
   });
   return out;
@@ -67,7 +67,10 @@ function glyphData(rects: [number, number, number, number][]): number[] {
 
 // Glyph 0 is the empty fallback. Lowercase letters share the capitals' shapes.
 const chars = Object.keys(GLYPH_ROWS).filter((c) => c !== ' ').sort((a, b) => a.charCodeAt(0) - b.charCodeAt(0));
-const glyphs: number[][] = [[], [], ...chars.map((c) => glyphData(rectsFor(GLYPH_ROWS[c])))];
+const rectsOf = (c: string) => rectsFor(GLYPH_ROWS[c], glyphBox(c).left);
+const advanceOf = (c: string) => (glyphBox(c).width + 1) * UNIT;
+const glyphs: number[][] = [[], [], ...chars.map((c) => glyphData(rectsOf(c)))];
+const advances = [ADV, advanceOf(' '), ...chars.map(advanceOf)];
 const map = new Map<number, number>([[32, 1]]);
 chars.forEach((c, i) => {
   map.set(c.charCodeAt(0), i + 2);
@@ -87,9 +90,9 @@ hhea.u32(0x00010000).i16(ASC).i16(-DESC).i16(0).u16(ADV).i16(0).i16(0).i16(ADV).
 for (let i = 0; i < 4; i++) hhea.i16(0);
 hhea.i16(0).u16(glyphs.length);
 const hmtx = new Writer();
-for (let i = 0; i < glyphs.length; i++) hmtx.u16(ADV).i16(0);
+for (const a of advances) hmtx.u16(a).i16(0);
 const maxp = new Writer();
-const maxRects = Math.max(...chars.map((c) => rectsFor(GLYPH_ROWS[c]).length));
+const maxRects = Math.max(...chars.map((c) => rectsOf(c).length));
 maxp.u32(0x00010000).u16(glyphs.length).u16(maxRects * 4).u16(maxRects);
 for (let i = 0; i < 2; i++) maxp.u16(0);
 maxp.u16(2);

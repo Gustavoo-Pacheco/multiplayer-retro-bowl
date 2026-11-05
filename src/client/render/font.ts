@@ -24,23 +24,43 @@ for (const [ch, hex] of Object.entries(GLYPHS)) {
 /** The glyph bitmaps by character, one number per row. tools/make-font.ts builds the menu font from these. */
 export const GLYPH_ROWS: Record<string, number[]> = Object.fromEntries(parsed);
 
-export const CHAR_W = 6;
 export const CHAR_H = 7;
+const SPACE_W = 3;
 
-export function textWidth(text: string, scale = 1): number { return text.length * CHAR_W * scale - scale; }
+/**
+ * Where a glyph's ink starts, and how wide it is. Letters are as wide as they're drawn, so an I doesn't sit in
+ * gaps. Digits all keep the full width, so a running clock doesn't shuffle sideways.
+ */
+export function glyphBox(ch: string): { left: number; width: number } {
+  if (ch === ' ') return { left: 0, width: SPACE_W };
+  const rows = GLYPH_ROWS[ch];
+  if (!rows || (ch >= '0' && ch <= '9')) return { left: 0, width: 5 };
+  let lo = 5;
+  let hi = -1;
+  for (const bits of rows) for (let c = 0; c < 5; c++) if (bits & (16 >> c)) { lo = Math.min(lo, c); hi = Math.max(hi, c); }
+  return hi < 0 ? { left: 0, width: SPACE_W } : { left: lo, width: hi - lo + 1 };
+}
+
+export function textWidth(text: string, scale = 1): number {
+  let w = 0;
+  for (const ch of text) w += glyphBox(ch.toUpperCase()).width + 1;
+  return Math.max(0, w - 1) * scale;
+}
 
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color = '#fff', scale = 1): void {
   ctx.fillStyle = color;
   let px = Math.round(x);
   const py = Math.round(y);
   for (const raw of text) {
-    const rows = parsed.get(raw.toUpperCase()) ?? parsed.get(' ')!;
+    const ch = raw.toUpperCase();
+    const rows = parsed.get(ch) ?? parsed.get(' ')!;
+    const box = glyphBox(ch);
     for (let r = 0; r < 7; r++) {
       const bits = rows[r];
       if (!bits) continue;
-      for (let c = 0; c < 5; c++) if (bits & (16 >> c)) ctx.fillRect(px + c * scale, py + r * scale, scale, scale);
+      for (let c = 0; c < 5; c++) if (bits & (16 >> c)) ctx.fillRect(px + (c - box.left) * scale, py + r * scale, scale, scale);
     }
-    px += CHAR_W * scale;
+    px += (box.width + 1) * scale;
   }
 }
 

@@ -104,7 +104,8 @@ export const T = {
     pause: 60000, watchdog: 5000, watchdogTick: 1000, cleanup: 2 * 3600 * 1000, handoffBanner: 600,
     choiceDefaultGrace: 300,
   },
-  replay: { rate: 0.8 },
+  replay: { rate: 0.8, bufferFrames: 1200 },
+  fx: { trail: 14, exciteBigPlay: 2500, exciteTouchdown: 4500, exciteFieldGoal: 3000, fireworkScore: 800, fireworkWin: 500, confettiWin: 160, helpedFor: 4000, helpedWalk: 450, particleCap: 400 },
   net: {
     frameMs: 50, bufferMs: 150, bufferMaxMs: 600, maxFrameBytes: 256, maxMsgPerSec: 60, backoffMin: 500, backoffMax: 5000, pingMs: 8000, pongTimeoutMs: 20000,
   },

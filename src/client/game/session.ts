@@ -258,7 +258,7 @@ export class Session {
     this.setMatch(m.match);
     this.playClockEnd = m.pc === null ? null : performance.now() + m.pc;
     this.bannerEnd = m.bannerMs === null ? 0 : performance.now() + m.bannerMs;
-    if (m.match.phase !== 'live') { this.sim = null; this.shadow = null; this.live = false; }
+    if (m.match.phase !== 'live') { this.sim = null; this.shadow = null; this.live = false; this.buffer.markEnded(); }
     else if (m.live) {
       // A rejoin mid-play. A page that kept its sim carries on; otherwise it watches until the play ends.
       this.live = true;

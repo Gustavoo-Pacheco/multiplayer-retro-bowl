@@ -25,4 +25,4 @@ Every match setting, and what checks it. `rules` is `tests/rules/settings.test.t
 | Team ratings | real, compressed, equal | rules |
 | Weather | clear, rain, snow, wind, random | rules: catch, fumble and wind effects, and the seeded pick |
 | Aim cursor | fades, full | rules |
-| Replays | off, big, all | `tests/e2e/m7-presentation.spec.ts` |
+| Replays | off, big, all | `tests/rules/presentation.test.ts`, `tests/room/presentation.test.ts`, `tests/e2e/m7-presentation.spec.ts` |

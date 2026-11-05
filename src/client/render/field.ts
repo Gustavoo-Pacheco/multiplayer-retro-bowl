@@ -8,7 +8,7 @@ import { FIELD_TOP, H, PX, W } from './view';
 
 const MARGIN_YARDS = 6;
 
-export interface FieldOpts { left: Team; right: Team; home: Team; visitor: Team; weather: Weather; seed: number }
+export interface FieldOpts { left: Team; right: Team; home: Team; visitor: Team; weather: Weather; seed: number; midfield?: boolean }
 export interface FieldArt { canvas: HTMLCanvasElement; offsetX: number }
 
 /** A small seeded generator, so the same stadium draws the same crowd on both screens. */
@@ -55,9 +55,9 @@ function drawStands(g: CanvasRenderingContext2D, w: number, o: FieldOpts, rand: 
   for (let x = 40; x < w; x += 220) drawText(g, 'BORG BOWL', x, standsH + 1, lum(o.home.primary) > 0.6 ? '#14181c' : '#f4f4ee');
 }
 
-function drawSidelineStrip(g: CanvasRenderingContext2D, X: (x: number) => number, y: number, rand: () => number): void {
+function drawSidelineStrip(g: CanvasRenderingContext2D, X: (x: number) => number, y: number, rand: () => number, weather: Weather): void {
   const h = T.view.stripH;
-  g.fillStyle = '#2f6a36';
+  g.fillStyle = weather === 'snow' ? '#b7c7bf' : '#2f6a36';
   g.fillRect(0, y, g.canvas.width, h);
   for (let x = 12; x < T.field.len - 8; x += 16) {
     const px = X(x + rand() * 4);
@@ -109,11 +109,11 @@ export function buildField(o: FieldOpts): FieldArt {
   const bot = top + fh;
 
   drawStands(g, c.width, o, rand);
-  drawSidelineStrip(g, X, T.view.standsH + T.view.walkH, rand);
+  drawSidelineStrip(g, X, T.view.standsH + T.view.walkH, rand, o.weather);
   // The grass past the field's lower edge.
-  g.fillStyle = '#2f6a36';
+  g.fillStyle = o.weather === 'snow' ? '#b7c7bf' : '#2f6a36';
   g.fillRect(0, bot, c.width, H - bot);
-  g.fillStyle = '#28602f';
+  g.fillStyle = o.weather === 'snow' ? '#a9bbb2' : '#28602f';
   for (let x = 0; x < c.width; x += 40) g.fillRect(x, bot + 8, 20, H - bot - 8);
 
   // Grass bands every 5 yards. Snow and rain darken or pale them.
@@ -209,15 +209,17 @@ export function buildField(o: FieldOpts): FieldArt {
       if (n !== 50) arrow(px, cy, x < 60 ? -1 : 1);
     }
   }
-  // The home team's letters at midfield.
-  const midText = o.home.id;
-  const mid = X(60);
-  g.fillStyle = shade(o.home.primary, 0.9);
-  g.fillRect(mid - 40, top + fh / 2 - 22, 80, 44);
-  g.fillStyle = o.home.secondary;
-  g.fillRect(mid - 40, top + fh / 2 - 22, 80, 3);
-  g.fillRect(mid - 40, top + fh / 2 + 19, 80, 3);
-  drawText(g, midText, mid - textWidth(midText, 4) / 2, top + fh / 2 - 14, lum(o.home.primary) > 0.62 ? '#14181c' : '#f4f4ee', 4);
+  // The home team's letters at midfield. The title screen leaves them out, because its panel sits there.
+  if (o.midfield !== false) {
+    const midText = o.home.id;
+    const mid = X(60);
+    g.fillStyle = shade(o.home.primary, 0.9);
+    g.fillRect(mid - 40, top + fh / 2 - 22, 80, 44);
+    g.fillStyle = o.home.secondary;
+    g.fillRect(mid - 40, top + fh / 2 - 22, 80, 3);
+    g.fillRect(mid - 40, top + fh / 2 + 19, 80, 3);
+    drawText(g, midText, mid - textWidth(midText, 4) / 2, top + fh / 2 - 14, lum(o.home.primary) > 0.62 ? '#14181c' : '#f4f4ee', 4);
+  }
   // Sideline border.
   g.fillStyle = lineCol;
   g.fillRect(X(0) - 1, top - 2, X(120) - X(0) + 3, 3);

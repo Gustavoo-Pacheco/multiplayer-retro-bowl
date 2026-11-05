@@ -5,6 +5,26 @@ import { closePlayers, DESKTOP, makeRoom, PHONE, pickAndReady, player, setOption
 const QS = 'dev=1&bot=1&speed=3';
 const shot = (p: Page, name: string) => p.screenshot({ path: `screenshots/${name}.png` });
 
+/** Fails if any selected control hides its own label, or any row of scores wraps onto two lines. */
+const readable = async (p: Page, label: string) => {
+  const res = await p.evaluate(() => {
+    const bad: string[] = [];
+    for (const el of document.querySelectorAll('button.on, .tab.on, .opt.on')) {
+      const st = getComputedStyle(el);
+      if (st.color === st.backgroundColor) bad.push(`same colours: ${el.textContent}`);
+    }
+    for (const el of document.querySelectorAll('.team-row, .player-row')) {
+      if ((el as HTMLElement).offsetHeight > parseFloat(getComputedStyle(el).lineHeight) * 1.9 + 8) bad.push(`wraps: ${el.textContent}`);
+    }
+    // Long nicknames and waiting messages may shorten with "...", but scores and ready words may not.
+    for (const el of document.querySelectorAll('.player-row .scores, .player-row .ready-word')) {
+      if (el.scrollWidth > el.clientWidth + 1) bad.push(`cut off: ${el.textContent}`);
+    }
+    return bad;
+  });
+  expect(res, label).toEqual([]);
+};
+
 const noHorizontalScroll = async (p: Page, label: string) => {
   const over = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   expect(over, `${label} scrolls sideways`).toBeLessThanOrEqual(0);
@@ -16,7 +36,7 @@ async function waitPhase(p: Page, fn: string, timeout = 180000): Promise<void> {
 
 for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
   test(`every screen at ${size} size, through a real game`, async ({ baseURL }) => {
-    test.setTimeout(420000);
+    test.setTimeout(600000);
     const a = await player(baseURL, view);
     const b = await player(baseURL, view);
     try {
@@ -32,18 +52,22 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
       await expect(a.page.getByTestId('seat-1')).toContainText('Rams');
       await shot(a.page, `team-menu-${size}`);
       await noHorizontalScroll(a.page, 'team menu');
+      await readable(a.page, 'team menu');
       await a.page.getByTestId('tab-settings').click();
+      expect(await a.page.evaluate(() => document.querySelector('.lobby-body')!.scrollTop), 'settings opens at the top').toBe(0);
       await shot(a.page, `settings-${size}`);
       await noHorizontalScroll(a.page, 'settings');
+      await readable(a.page, 'settings');
       await a.page.getByTestId('sound').click();
       await expect(a.page.getByTestId('prefs')).toBeVisible();
       await shot(a.page, `player-settings-${size}`);
+      await readable(a.page, 'player settings');
       await a.page.getByTestId('modal-close').click();
       await a.page.getByTestId('help').click();
       await expect(a.page.getByTestId('help-panel')).toBeVisible();
       await shot(a.page, `help-${size}`);
       await a.page.getByTestId('modal-close').click();
-      await setOption(a.page, 'quarter', '1');
+      await setOption(a.page, 'quarter', '2');
       await setOption(a.page, 'replays', 'big');
       await pickAndReady(a, b, 'SEA', 'LAR');
       // Slow enough to catch each moment on screen.
@@ -53,12 +77,19 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
       await shot(a.page, `match-presnap-${size}`);
       await shot(b.page, `match-watcher-${size}`);
       // Hold both bots' skip button so the replay stays on screen for a picture, then let them carry on.
-      const until = Date.now() + 200000;
+      const until = Date.now() + 340000;
+      let shotHalf = false;
       let shotPlay = false;
       let shotBanner = false;
       let shotReplay = false;
-      while (Date.now() < until && !(shotBanner && shotReplay)) {
+      while (Date.now() < until && !(shotBanner && shotReplay && shotHalf)) {
+        if (await a.page.getByTestId('final').isVisible()) break;
         const st = await a.page.evaluate(() => { const s = (window as any).__borg; return { sim: s.sim?.phase ?? null, phase: s.match?.phase, kind: s.match?.banner?.kind }; });
+        if (!shotHalf && st.phase === 'banner' && st.kind === 'half') {
+          await a.page.waitForTimeout(500);
+          await shot(a.page, `match-halftime-${size}`);
+          shotHalf = true;
+        }
         if (!shotPlay && st.sim === 'pocket') { await shot(a.page, `match-play-${size}`); shotPlay = true; }
         if (!shotBanner && st.phase === 'banner' && st.kind === 'touchdown') {
           await a.page.evaluate(() => { (window as any).__borg.opts.bot = false; });
@@ -82,7 +113,8 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
       }
       expect(shotBanner, 'saw a touchdown').toBe(true);
       expect(shotReplay, 'saw its replay').toBe(true);
-      await expect(a.page.getByTestId('final')).toBeVisible({ timeout: 300000 });
+      expect(shotHalf, 'saw the halftime scoreboard').toBe(true);
+      await expect(a.page.getByTestId('final')).toBeVisible({ timeout: 200000 });
       await a.page.waitForTimeout(600);
       await shot(a.page, `final-${size}`);
       await noHorizontalScroll(a.page, 'final');
@@ -119,6 +151,8 @@ test('the sprite page shows all 13 groups, and every drawing has pixels', async 
     await a.page.getByTestId('sprite-group-0').scrollIntoViewIfNeeded();
     await a.page.getByTestId('sprite-teams').scrollIntoViewIfNeeded();
     await shot(a.page, 'sprites-all-teams');
+    await a.page.getByTestId('sprite-kits').scrollIntoViewIfNeeded();
+    await a.page.getByTestId('sprite-kits').screenshot({ path: 'screenshots/sprites-kit-chart.png' });
     expect(a.errors).toEqual([]);
   } finally { await closePlayers(a); }
 });

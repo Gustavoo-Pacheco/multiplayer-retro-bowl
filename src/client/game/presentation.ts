@@ -3,6 +3,7 @@ import { TEAM_BY_ID } from '../../shared/data/teams';
 import type { Frame } from '../../shared/protocol';
 import type { MatchState } from '../../shared/rules/match';
 import { EV, type Seat } from '../../shared/sim/state';
+import { T } from '../../shared/sim/tuning';
 import { audio } from '../audio/engine';
 import type { SoundName } from '../audio/sounds';
 import { Effects } from '../render/effects';
@@ -17,7 +18,6 @@ const EV_SOUNDS: [number, SoundName][] = [
 ];
 
 const CROWD_AFTER: Partial<Record<string, SoundName>> = { incomplete: 'groan', fgMiss: 'groan', xpMiss: 'groan', pi: 'boo' };
-const TRAIL = 14;
 
 export class Presentation {
   fx = new Effects();
@@ -44,7 +44,7 @@ export class Presentation {
     if (ev & EV.dive) this.fx.dust(f.bx, f.by);
     if (ev & EV.fumble) { audio.play('drop'); audio.play('groan'); this.fx.dust(f.bx, f.by, 10); }
     if (ev & EV.int) { audio.play('turnover'); audio.play('groan'); }
-    if (ev & EV.bigPlay) { audio.play('swell'); this.exciteUntil = Math.max(this.exciteUntil, performance.now() + 2500); }
+    if (ev & EV.bigPlay) { audio.play('swell'); this.exciteUntil = Math.max(this.exciteUntil, performance.now() + T.fx.exciteBigPlay); }
   }
 
   /** The kicker hears the meter tick as it climbs. */
@@ -89,11 +89,11 @@ export class Presentation {
       audio.play('cheer');
       this.fx.confetti(colours);
       this.fx.firework(colours);
-      this.exciteUntil = now + 4500;
+      this.exciteUntil = now + T.fx.exciteTouchdown;
     } else if (l.end === 'fgGood' || l.end === 'xpGood') {
       audio.play('fgGood');
       audio.play('cheer');
-      if (l.end === 'fgGood') { this.fx.firework(colours); this.exciteUntil = now + 3000; }
+      if (l.end === 'fgGood') { this.fx.firework(colours); this.exciteUntil = now + T.fx.exciteFieldGoal; }
     } else if (l.turnoverOnDowns) { audio.play('turnover'); audio.play('groan'); }
     else if (l.firstDown) audio.play('firstDown');
     if (l.end === 'fgMiss' || l.end === 'xpMiss') audio.play('fgMiss');
@@ -116,7 +116,7 @@ export class Presentation {
     const won = m.winner !== 'tie' && m.winner !== null && (me === null || m.winner === me);
     if (m.winner !== 'tie') audio.play(won ? 'winSting' : 'lossSting');
     else audio.play('lossSting');
-    if (m.winner !== 'tie' && m.winner !== null) this.fx.confetti(this.winnerColours(m), 160);
+    if (m.winner !== 'tie' && m.winner !== null) this.fx.confetti(this.winnerColours(m), T.fx.confettiWin);
   }
 
   private winnerColours(m: MatchState): string[] {
@@ -131,12 +131,12 @@ export class Presentation {
     // Keep the trail while the ball is in the air.
     if (f.carrier < 0 && f.bz > 0.2) {
       this.trail.push({ x: f.bx, y: f.by, z: f.bz });
-      if (this.trail.length > TRAIL) this.trail.shift();
+      if (this.trail.length > T.fx.trail) this.trail.shift();
     } else if (this.trail.length) this.trail.shift();
     if (!m) return;
     const scoring = m.phase === 'banner' && (m.banner?.kind === 'touchdown' || m.banner?.kind === 'score');
     const won = m.phase === 'final' && m.winner !== 'tie' && m.winner !== null;
-    if ((scoring || won) && now - this.lastFire > (won ? 500 : 800)) {
+    if ((scoring || won) && now - this.lastFire > (won ? T.fx.fireworkWin : T.fx.fireworkScore)) {
       this.lastFire = now;
       const l = m.last;
       if (won) this.fx.firework(this.winnerColours(m));
@@ -178,8 +178,8 @@ export class Presentation {
     let helped: SceneOpts['helped'] = null;
     if (this.helped) {
       const age = now - this.helpedStart;
-      if (age > 4000) this.helped = null;
-      else helped = { x: this.helped.x, y: Math.max(-1, this.helped.y - age / 450), seat: this.helped.seat, skin: this.helped.skin, tick: Math.floor(age / 16) };
+      if (age > T.fx.helpedFor) this.helped = null;
+      else helped = { x: this.helped.x, y: Math.max(-1, this.helped.y - age / T.fx.helpedWalk), seat: this.helped.seat, skin: this.helped.skin, tick: Math.floor(age / 16) };
     }
     return {
       nameTags: prefs.nameTags, starMarkers: prefs.starMarkers,

@@ -13,6 +13,8 @@ export class FrameBuffer {
   /** The longest time playback held still waiting for a frame, in ms. */
   worstHoldMs = 0;
   private holdStart = 0;
+  /** The room has moved past this play, so a still picture is now a banner or replay, not a stall. */
+  private ended = false;
   evPending = 0;
   readonly out: Frame = emptyFrame();
 
@@ -22,7 +24,11 @@ export class FrameBuffer {
     this.started = false;
     this.playTick = 0;
     this.holdStart = 0;
+    this.ended = false;
   }
+
+  /** The play is over: its last frame may not say so, because frames go out 20 times a second. */
+  markEnded(): void { this.ended = true; }
 
   /** The new controller's frames continue the same tick count, so nothing else needs to change. */
   push(buf: ArrayBuffer): Frame | null {
@@ -54,10 +60,10 @@ export class FrameBuffer {
     if (newest - this.playTick > maxTicks) this.playTick = newest - wantTicks;
     if (this.playTick >= newest) {
       // Frames stop for good when a play ends, so running dry there isn't a stutter.
-      if (before < newest && fr[fr.length - 1].phase !== 'dead') this.underruns += 1;
+      if (!this.ended && before < newest && fr[fr.length - 1].phase !== 'dead') this.underruns += 1;
       this.playTick = newest;
       if (!this.holdStart) this.holdStart = nowMs;
-      if (fr[fr.length - 1].phase !== 'dead') this.worstHoldMs = Math.max(this.worstHoldMs, nowMs - this.holdStart);
+      if (!this.ended && fr[fr.length - 1].phase !== 'dead') this.worstHoldMs = Math.max(this.worstHoldMs, nowMs - this.holdStart);
     } else this.holdStart = 0;
     while (fr.length > 2 && fr[1].tick <= this.playTick) fr.shift();
     const a = fr[0];

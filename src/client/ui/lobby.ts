@@ -142,7 +142,7 @@ export class Lobby {
 
   private renderTabs(): void {
     clear(this.tabs);
-    const tab = (id: Tab, label: string) => h('button', { class: `tab${this.tab === id ? ' on' : ''}`, testid: `tab-${id}`, onclick: () => { this.tab = id; this.lastBody = ''; this.renderTabs(); this.renderBody(); } }, label);
+    const tab = (id: Tab, label: string) => h('button', { class: `tab${this.tab === id ? ' on' : ''}`, testid: `tab-${id}`, onclick: () => { this.tab = id; this.lastBody = ''; this.renderTabs(); this.renderBody(); this.body.scrollTop = 0; } }, label);
     this.tabs.append(tab('teams', 'TEAMS'), tab('settings', 'MATCH SETTINGS'), h('span', { class: 'spacer' }));
     if (this.tab === 'teams') {
       this.tabs.append(h('span', { class: 'dim' }, 'Sort by:'));

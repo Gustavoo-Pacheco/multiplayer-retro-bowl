@@ -19,6 +19,16 @@ function sheet(team: string, away: boolean, skin: number, build: BuildName, name
   return c;
 }
 
+/** One team's home and away figures, close together, for the chart of all 32. */
+function kitCell(team: string): HTMLCanvasElement {
+  const STEP = 26;
+  const c = h('canvas', { width: STEP * 2, height: CELL_H, style: `width:${STEP * 2 * SCALE}px;height:${CELL_H * SCALE}px;image-rendering:pixelated;background:#3f8a44` });
+  const g = c.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  [false, true].forEach((away, i) => ATLAS.get(teamKit(team, away), i * 2).draw(g, 'std', 'stance', 0, STEP / 2 + i * STEP, CELL_H - 1, 1));
+  return c;
+}
+
 const groupBuild = (g: typeof GROUPS[number], name: string): BuildName => (!g.sideline ? g.build : name === 'photoIdle' ? 'photo' : name === 'benchIdle' ? 'std' : 'coach');
 
 export function showDevSprites(parent: HTMLElement): void {
@@ -50,10 +60,15 @@ export function showDevSprites(parent: HTMLElement): void {
     line.append(sheet(t.id, false, 0, 'std', LINE), sheet(t.id, false, 2, 'big', LINE), sheet(t.id, true, 1, 'std', LINE), sheet(t.id, true, 3, 'big', LINE));
     everyTeam.append(line);
   }
+  // The whole league at once: home on the left, away on the right.
+  const kits = h('div', { class: 'kit-chart', testid: 'sprite-kits' });
+  for (const t of TEAMS) kits.append(h('figure', {}, kitCell(t.id), h('figcaption', {}, t.id)));
   parent.append(h('div', { class: 'dev-sprites', testid: 'dev-sprites' },
     h('h2', {}, 'Sprites'),
     h('div', { class: 'row', style: 'justify-content:flex-start' }, pick, h('label', {}, awayBox, ' Away kit')),
     groups,
+    h('h2', {}, 'Every kit'),
+    kits,
     h('h2', {}, 'Every team'),
     everyTeam,
   ));

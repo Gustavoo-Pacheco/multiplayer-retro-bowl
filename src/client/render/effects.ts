@@ -1,14 +1,14 @@
 // Dust, contact bursts, confetti and fireworks. Nothing here affects the game.
+import { T } from '../../shared/sim/tuning';
 import { PY, screenX, screenY, W } from './view';
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; gravity: number; screen: boolean }
 
-const CAP = 400;
 
 export class Effects {
   private p: Particle[] = [];
 
-  private add(q: Particle): void { if (this.p.length < CAP) this.p.push(q); }
+  private add(q: Particle): void { if (this.p.length < T.fx.particleCap) this.p.push(q); }
 
   /** A puff of grass where someone hits the ground, in world yards. */
   dust(x: number, y: number, n = 6): void {

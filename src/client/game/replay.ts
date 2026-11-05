@@ -15,7 +15,7 @@ export class ReplayBuffer {
     if (last && f.tick <= last.tick) return;
     this.frames.push(f);
     // About a minute of frames, far more than one play needs.
-    if (this.frames.length > 1200) this.frames.shift();
+    if (this.frames.length > T.replay.bufferFrames) this.frames.shift();
   }
 
   /** Starts from a point that lets the last moments fit the replay's time. */

@@ -24,7 +24,7 @@ export function titleArt(weather: Weather = 'clear'): HTMLCanvasElement {
   g.imageSmoothingEnabled = false;
   const a = TEAM_BY_ID.SEA;
   const b = TEAM_BY_ID.LAR;
-  const art = buildField({ left: a, right: b, home: a, visitor: b, weather, seed: 4 });
+  const art = buildField({ left: a, right: b, home: a, visitor: b, weather, seed: 4, midfield: false });
   const cam = 55;
   drawField(g, art, cam);
   const kits = { a: teamKit(a, false), b: teamKit(b, false) };
