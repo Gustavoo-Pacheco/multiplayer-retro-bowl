@@ -1,6 +1,6 @@
 // Ends a play and builds the result the rules module will read.
 import { T } from './tuning';
-import { dirOf, EV, inOwnEndZone, type PlayEnd, type PlayResult, type SimState } from './state';
+import { dirOf, EV, inOwnEndZone, isKickType, type PlayEnd, type PlayResult, type SimState } from './state';
 
 export function endPlay(s: SimState, end: PlayEnd, spotOverride?: number): void {
   if (s.phase === 'dead') return;
@@ -20,7 +20,12 @@ export function endPlay(s: SimState, end: PlayEnd, spotOverride?: number): void 
     else if (!s.pass && end !== 'incomplete') stats.rushYds += yards;
   }
   const dirHolder = holder ? dirOf(s, holder.seat) : dir;
-  const big = (isScrimmage && Math.abs(yards) >= 20) || end === 'td';
+  let ret = 0;
+  if (isKickType(s.desc.type) && s.kick?.caught && s.possessor !== off) {
+    ret = Math.round((spotX - s.catchX) * dirOf(s, s.possessor));
+    s.stats[s.possessor].retYds += ret;
+  }
+  const big = (isScrimmage && Math.abs(yards) >= T.play.bigGain) || ret >= T.play.bigReturn || end === 'td' || end === 'fgGood';
   const r: PlayResult = {
     playId: s.desc.id, type: s.desc.type, end, spotX, possessor: s.possessor, offense: off,
     clock: Math.max(0, s.clock), ezImpetus: s.ezImpetus && inOwnEndZone(spotX, dirHolder),

@@ -65,13 +65,18 @@ export const T = {
     defenderMissAfterJuke: 0.2,
   },
 
-  play: { deadHold: 1.1, celebrateHold: 1.6, routeArriveRadius: 0.5, hitchSpeed: 0.5 },
+  play: { bigGain: 20, bigReturn: 30, deadHold: 1.1, celebrateHold: 1.6, routeArriveRadius: 0.5, hitchSpeed: 0.5 },
 
-  fumble: { bounceLo: 0.5, bounceHi: 1.1, speedLo: 2, speedHi: 7, recoverRadius: 1.0, recoverMinTime: 0.25, recoverChance: 0.25, friction: 2.2, popZ: 4 },
+  fumble: { bounceLo: 0.5, bounceHi: 1.1, speedLo: 2, speedHi: 7, recoverRadius: 1.0, recoverMinTime: 0.25, recoverChance: 0.25, friction: 2.2, popZ: 4, maxLoose: 7 },
 
   kick: {
     meterHz: 0.9, greenLo: 0.74, greenHi: 0.9, missLoss: 1.1, minPower: 0.25,
-    arrowHzBase: 0.55, arrowHzPerAcc: -0.035, arrowMaxDeg: 13, arrowGoodBonus: 0,
+    arrowHzBase: 0.55, arrowHzPerAcc: -0.035, arrowHzMin: 0.18, arrowMaxDeg: 13, postLuck: 0.5,
+    aimTimeout: 6, autoAimDelay: 0.35, windDeg: 3, kickoffAimFactor: 0.35, puntAimFactor: 0.5, kickoffApproach: 5, holderAhead: 2,
+    onsideReturnDepth: 22, onsideFrontDepth: 11, onsidePowerBase: 0.8, onsidePeak: 0.8, onsideRoll: 2.5,
+    blockerDepth: 14, blockerStagger: 6, blockerScreen: 6, fgRushSpeed: 0.25, catchFrom: 0.85,
+    /** On the kicker's screen, how fast the ball's flight runs until the receiver's frames catch up. */
+    shadowRate: 0.6,
     rangeLo: 30, rangeHi: 60, xpDistance: 33, xpMinRange: 40,
     kickerBehindLos: 7, puntBehindLos: 10,
     uprightHalf: 2.0, crossbarZ: 3.0, postHitBand: 0.3, peakPerYard: 0.32, minHang: 0.9, hangPerYard: 0.038,
@@ -106,7 +111,7 @@ export const T = {
   },
   bot: {
     holdLo: 1.0, holdHi: 3.2, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.9, leadSteps: 8,
-    swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5,
+    swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5, kickMeterSlop: 0.09, kickAimSlop: 0.22,
   },
 };
 

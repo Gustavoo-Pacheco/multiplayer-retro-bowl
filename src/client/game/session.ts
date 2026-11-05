@@ -1,5 +1,5 @@
 // The match on this device: runs the sim when this player has the ball, plays frames otherwise.
-import { encodeFrame, emptyFrame, frameFromSim, type Frame, type RoomView, type ServerMsg } from '../../shared/protocol';
+import { encodeFrame, emptyFrame, frameFromSim, type Frame, type HandoffReason, type RoomView, type ServerMsg } from '../../shared/protocol';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { botChoice } from '../../shared/rules/coach';
 import { applySnap, simContext, type MatchState } from '../../shared/rules/match';
@@ -80,6 +80,7 @@ export class Session {
   private raf = 0;
   private botChoiceAt = 0;
   private live = false;
+  private shadow: SimState | null = null;
   private wakeLock: WakeLockSentinel | null = null;
 
   constructor(parent: HTMLElement, public net: NetLike, public opts: SessionOpts) {
@@ -240,6 +241,7 @@ export class Session {
     this.resultSent = false;
     this.sendEv = 0;
     this.acc = 0;
+    this.shadow = null;
     this.gestures.reset();
     this.sim = this.opts.local || play.offense === this.seat ? s : null;
     if (this.sim) this.sim.control = play.offense;
@@ -250,7 +252,7 @@ export class Session {
     this.setMatch(m.match);
     this.playClockEnd = m.pc === null ? null : performance.now() + m.pc;
     this.bannerEnd = m.bannerMs === null ? 0 : performance.now() + m.bannerMs;
-    if (m.match.phase !== 'live') { this.sim = null; this.live = false; }
+    if (m.match.phase !== 'live') { this.sim = null; this.shadow = null; this.live = false; }
     else if (m.live) {
       // A rejoin mid-play. A page that kept its sim carries on; otherwise it watches until the play ends.
       this.live = true;
@@ -273,7 +275,7 @@ export class Session {
     this.playClockEnd = null;
     this.live = true;
     this.stats.snaps += 1;
-    if (this.sim && this.sim.desc.id === m.playId && this.sim.phase === 'pre') {
+    if (this.sim && this.sim.desc.id === m.playId && (this.sim.phase === 'pre' || this.sim.phase === 'kickPower')) {
       this.sim.clock = m.clock;
       this.queue.push({ k: 'snap' });
       this.sentSnap = true;
@@ -286,6 +288,7 @@ export class Session {
     const s = m.state;
     acceptHandoff(s);
     this.sim = s;
+    this.shadow = null;
     this.handoffSent = false;
     this.resultSent = false;
     this.sendEv = 0;
@@ -294,7 +297,7 @@ export class Session {
     this.gestures.reset();
     frameFromSim(s, this.frame);
     this.hasFrame = true;
-    if (m.reason === 'kick') return;
+    if (m.reason === 'kick') { this.holdUntil = 0; return; }
     // Freeze for a moment, then the runner keeps moving with no input needed.
     this.holdUntil = performance.now() + T.timers.handoffBanner / this.opts.speed;
     this.turnBanner = 'YOUR BALL!';
@@ -305,13 +308,20 @@ export class Session {
   private onYield(m: Extract<ServerMsg, { t: 'yield' }>): void {
     this.stats.yields += 1;
     this.log.push(`yield:${m.reason}`);
+    // A kick has no freeze: this page keeps flying the ball until the receiver's frames catch up.
+    this.shadow = m.reason === 'kick' ? this.sim : null;
+    if (this.shadow) this.shadow.handoff = null;
     this.sim = null;
     this.handoffSent = false;
     this.buffer.reset(m.playId);
-    if (m.reason !== 'kick') {
-      this.turnBanner = m.reason === 'int' ? 'INTERCEPTED!' : 'FUMBLE LOST!';
-      this.turnBannerEnd = performance.now() + T.timers.handoffBanner / this.opts.speed;
-    }
+    this.showTurnover(m.reason, performance.now());
+  }
+
+  private showTurnover(reason: HandoffReason, now: number): void {
+    if (reason === 'kick') return;
+    if (this.turnBannerEnd > now) return;
+    this.turnBanner = reason === 'int' ? 'INTERCEPTED!' : reason === 'fumble' ? 'FUMBLE LOST!' : 'ONSIDE RECOVERED!';
+    this.turnBannerEnd = now + T.timers.handoffBanner / this.opts.speed;
   }
 
   // --- The loop --------------------------------------------------------------
@@ -339,7 +349,8 @@ export class Session {
     this.gestures.tick(now);
     this.botDecisions(now);
     const s = this.sim;
-    if (s && this.controlling()) {
+    if (this.shadow) this.tickShadow(dtMs, now);
+    else if (s && this.controlling()) {
       if (this.paused || this.waiting) {
         this.gestures.drain();
         this.queue.length = 0;
@@ -368,8 +379,22 @@ export class Session {
     this.syncGestures();
   }
 
+  /** Runs a slowed copy of the kick until the playback from the receiver is ahead of it. */
+  private tickShadow(dtMs: number, now: number): void {
+    const sh = this.shadow!;
+    this.acc += (dtMs / 1000) * this.opts.speed * T.kick.shadowRate;
+    while (this.acc >= DT) { this.acc -= DT; if (!sh.finished) step(sh, []); }
+    frameFromSim(sh, this.frame);
+    this.hasFrame = true;
+    if (this.buffer.update(dtMs, this.opts.speed, now) && this.buffer.out.tick >= sh.tick) {
+      this.shadow = null;
+      this.acc = 0;
+      this.frame = this.buffer.out;
+    }
+  }
+
   private afterSteps(s: SimState, now: number): void {
-    if (!this.sentSnap && s.phase !== 'pre') {
+    if (!this.sentSnap && s.phase !== 'pre' && s.phase !== 'kickPower') {
       this.sentSnap = true;
       this.live = true;
       this.playClockEnd = null;
@@ -379,7 +404,7 @@ export class Session {
     }
     this.sendEv |= s.ev;
     s.ev = 0;
-    if (s.phase !== 'pre' && now - this.lastFrameSent >= T.net.frameMs) {
+    if (this.sentSnap && now - this.lastFrameSent >= T.net.frameMs) {
       this.lastFrameSent = now;
       frameFromSim(s, this.frame);
       this.frame.ev = this.sendEv;
@@ -387,15 +412,13 @@ export class Session {
       this.net.sendFrame(encodeFrame(this.frame));
       this.stats.framesSent += 1;
     }
-    if (s.frozen && s.handoff && !this.handoffSent) {
+    if (s.handoff && !this.handoffSent) {
       this.handoffSent = true;
       this.net.send({ t: 'handoff', playId: s.desc.id, state: s, to: s.handoff.to, reason: s.handoff.reason, spotX: s.handoff.spotX });
-      if (s.handoff.reason !== 'kick') {
-        this.turnBanner = s.handoff.reason === 'int' ? 'INTERCEPTED!' : 'FUMBLE LOST!';
-        this.turnBannerEnd = now + T.timers.handoffBanner / this.opts.speed;
-      }
+      this.showTurnover(s.handoff.reason, now);
     }
-    if (s.finished && s.result && !this.resultSent) {
+    // While a handoff is undecided, the server hasn't said whether this page still owns the play.
+    if (s.finished && s.result && !this.resultSent && !s.handoff) {
       this.resultSent = true;
       this.stats.plays += 1;
       this.net.send({ t: 'playResult', result: s.result });
@@ -455,7 +478,9 @@ export class Session {
     } else if (m.phase === 'final') {
       drawStrip(ctx, 'FINAL', 320, 140, '#ffd23f', 2);
     } else if (sim && this.controlling()) {
-      if (sim.phase === 'pre') bottom = sim.desc.type === 'scrimmage' || sim.desc.type === 'twoPoint' ? 'TAP TO SNAP. TAP THE RB TO HAND OFF, THE QB TO RUN' : 'TAP TO KICK';
+      if (sim.phase === 'pre') bottom = 'TAP TO SNAP. TAP THE RB TO HAND OFF, THE QB TO RUN';
+      else if (sim.phase === 'kickPower') bottom = 'TAP IN THE GREEN FOR POWER';
+      else if (sim.phase === 'kickAim') bottom = 'TAP AS THE ARROW CROSSES THE MIDDLE';
       else if (sim.phase === 'pocket') bottom = sim.aim.on ? 'RELEASE TO THROW' : 'DRAG BACK TO AIM';
       else if (sim.ezWait > 0) bottom = 'TAP TO RUN IT OUT';
     } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && !mine) {
@@ -466,7 +491,40 @@ export class Session {
       drawStrip(ctx, this.commentary, 320, 26, '#fff', 1, col);
     }
     if (bottom) drawStrip(ctx, bottom, 320, 340);
+    this.drawKickMeter(ctx);
     if (now < this.turnBannerEnd) drawStrip(ctx, this.turnBanner, 320, 140, '#ffd23f', 3);
+  }
+
+  private drawKickMeter(ctx: CanvasRenderingContext2D): void {
+    const f = this.frame;
+    if (!this.hasFrame || (f.phase !== 'kickPower' && f.phase !== 'kickAim')) return;
+    const K = T.kick;
+    const x = 590;
+    const top = 90;
+    const h = 170;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 3, top - 3, 22, h + 6);
+    ctx.fillStyle = '#44525e';
+    ctx.fillRect(x, top, 16, h);
+    ctx.fillStyle = '#58d68d';
+    ctx.fillRect(x, top + h * (1 - K.greenHi), 16, h * (K.greenHi - K.greenLo));
+    const pw = f.ax;
+    ctx.fillStyle = '#ffd23f';
+    ctx.fillRect(x - 3, Math.round(top + h * (1 - pw)) - 1, 22, 3);
+    if (f.phase === 'kickAim') {
+      // The arrow swings across the middle, which points at the goal.
+      const cx = 320;
+      const y = 300;
+      const w = 130;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(cx - w - 4, y - 4, w * 2 + 8, 16);
+      ctx.fillStyle = '#44525e';
+      ctx.fillRect(cx - w, y, w * 2, 8);
+      ctx.fillStyle = '#58d68d';
+      ctx.fillRect(cx - 12, y, 24, 8);
+      ctx.fillStyle = '#ffd23f';
+      ctx.fillRect(Math.round(cx + f.ay * w) - 2, y - 4, 4, 16);
+    }
   }
 
   private statusText(m: MatchState): string {

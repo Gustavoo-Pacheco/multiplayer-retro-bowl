@@ -1,4 +1,5 @@
 import type { Seat, ServerMsg } from '../../src/shared/protocol';
+import { emptyStats } from '../../src/shared/sim/state';
 import type { MatchState } from '../../src/shared/rules/match';
 import type { MatchConfig } from '../../src/shared/data/config';
 import { joined, newCode, TestClient } from './client';
@@ -48,13 +49,30 @@ export async function waitState(c: TestClient, pred: (m: MatchState) => boolean,
   }
 }
 
+/** The kicking team kicks, with a touchback: what a client reports when no one returns it. */
+export async function kickoffTouchback(kicker: TestClient, k: MatchState): Promise<void> {
+  const play = k.play!;
+  const other = (1 - play.offense) as Seat;
+  kicker.send({ t: 'snap', playId: play.id });
+  kicker.send({
+    t: 'playResult',
+    result: {
+      playId: play.id, type: play.type, end: 'touchback', spotX: play.dir > 0 ? 115 : 5, possessor: other, offense: play.offense, clock: k.clock, ezImpetus: true, lastCarrier: other,
+      sack: false, stats: [emptyStats(), emptyStats()], touches: [], armFatigue: [0, 0], injury: null, yards: 0, big: false,
+    },
+  });
+}
+
 /** Runs from the coin toss through any automatic kicks to the first play from scrimmage. */
 export async function toScrimmage(p: Pair): Promise<{ match: MatchState; off: TestClient; def: TestClient; offSeat: Seat }> {
   expire(p.a, 'banner');
   const pre = (m: MatchState) => m.phase === 'presnap' && m.play?.type === 'scrimmage';
-  const first = await waitState(p.a, (m) => pre(m) || m.phase === 'kickChoice');
-  if (first.phase === 'kickChoice') (first.kicker === 0 ? p.a : p.b).send({ t: 'choice', c: 'deep' });
-  const m = first.phase === 'kickChoice' ? await waitState(p.a, pre) : first;
+  const first = await waitState(p.a, (m) => m.phase === 'kickChoice');
+  const kicker = first.kicker === 0 ? p.a : p.b;
+  kicker.send({ t: 'choice', c: 'deep' });
+  const k = await waitState(p.a, (m) => m.phase === 'presnap' && m.play?.type === 'kickoff');
+  await kickoffTouchback(kicker, k);
+  const m = await waitState(p.a, pre);
   await waitState(p.b, pre);
   const offSeat = m.play!.offense;
   return { match: m, offSeat, off: offSeat === 0 ? p.a : p.b, def: offSeat === 0 ? p.b : p.a };

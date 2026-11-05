@@ -105,6 +105,8 @@ export interface KickState {
   kicked: boolean; landed: boolean; caught: boolean; good: boolean; returner: number; postHit: boolean;
   onsideRoll: number; ezWindowT: number; ezPending: boolean; ranOut: boolean;
   acc: number;
+  /** The play clock ran out, so the kick takes itself. */
+  auto: boolean;
 }
 
 export interface Gestures {

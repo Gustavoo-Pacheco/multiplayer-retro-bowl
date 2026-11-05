@@ -1,6 +1,7 @@
 // Builds the starting state of a play: formations, jobs and defensive call.
 import { armRange, DEFENSE_SLOTS, OFFENSE_SLOTS, topSpeed, type RosterPlayer } from '../data/roster';
 import { PLAYBOOK, ROUTES, type RouteName } from '../data/playbook';
+import { createKick } from './kick';
 import { rnd } from './rng';
 import { T } from './tuning';
 import { emptyStats, type BallState, type PlayDesc, type Seat, type SimCfg, type SimPlayer, type SimState, type SimTeams } from './state';
@@ -17,7 +18,7 @@ export function makePlayer(i: number, seat: Seat, r: RosterPlayer, cond: number,
   };
 }
 
-function baseState(desc: PlayDesc, cfg: SimCfg): Omit<SimState, 'players' | 'ball'> {
+export function baseState(desc: PlayDesc, cfg: SimCfg): Omit<SimState, 'players' | 'ball'> {
   return {
     v: 1, rng: desc.seed >>> 0, tick: 0, t: 0, snapT: 0, desc, cfg, phase: 'pre', phaseT: 0,
     possessor: desc.offense, lastCarrier: desc.offense, control: desc.offense,
@@ -50,7 +51,7 @@ function buildRoute(name: Exclude<RouteName, 'block'>, x: number, y: number, dir
 }
 
 export function createPlay(desc: PlayDesc, teams: SimTeams, cfg: SimCfg): SimState {
-  return createScrimmage(desc, teams, cfg);
+  return desc.type === 'scrimmage' || desc.type === 'twoPoint' ? createScrimmage(desc, teams, cfg) : createKick(desc, teams, cfg);
 }
 
 export function createScrimmage(desc: PlayDesc, teams: SimTeams, cfg: SimCfg): SimState {

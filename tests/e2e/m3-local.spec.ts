@@ -14,12 +14,15 @@ test('a full game on one device reaches the final screen', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('a person can choose on 4th down by button and keyboard, and a timeout reopens the choice', async ({ page }) => {
+test('a person can kick by keyboard, choose on 4th down by button and key, and a timeout reopens the choice', async ({ page }) => {
   await page.goto('/?local=1&q=1&dev=1');
   await page.waitForFunction(() => (window as any).__borg?.match?.phase === 'presnap' || (window as any).__borg?.match?.phase === 'kickChoice', undefined, { timeout: 15000 });
-  // Get past any opening onside choice, then wait for a scrimmage play (kicks are automatic at this stage).
+  // Get past the opening onside choice, kick it with two taps, and wait for a play from scrimmage.
   if (await page.evaluate(() => (window as any).__borg.match.phase === 'kickChoice')) await page.getByTestId('choice-deep').click();
-  await page.waitForFunction(() => (window as any).__borg.match.play?.type === 'scrimmage');
+  await page.waitForFunction(() => (window as any).__borg.match.play?.type === 'kickoff');
+  await page.keyboard.press('Space');
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => (window as any).__borg.match.phase === 'presnap' && (window as any).__borg.match.play?.type === 'scrimmage', undefined, { timeout: 60000 });
   await page.evaluate(() => {
     const b = (window as any).__borg;
     b.net.core.onMessage(b.net.controllerConn(), JSON.stringify({ t: 'dev', op: 'patch', patch: { down: 4, toGo: 2, ballX: 50, chosen4th: false, phase: 'choice4th', play: null } }));

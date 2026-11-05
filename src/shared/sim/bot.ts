@@ -5,12 +5,13 @@ import { dirOf, type SimInput, type SimPlayer, type SimState } from './state';
 
 export interface BotState extends HasRng {
   playId: number; plan: 'pass' | 'run' | 'qb'; holdUntil: number; snapDelay: number; aimT: number; target: number; kickDelay: number;
+  aimTarget: number;
   /** Set true to skip all gestures, leaving the runner to the auto-runner. */
   passive: boolean;
 }
 
 export function newBot(seed: number): BotState {
-  return { rng: seed, playId: -1, plan: 'pass', holdUntil: 0, snapDelay: 0, aimT: -1, target: -1, kickDelay: 0, passive: false };
+  return { rng: seed, playId: -1, plan: 'pass', holdUntil: 0, snapDelay: 0, aimT: -1, target: -1, kickDelay: 0, passive: false, aimTarget: 99 };
 }
 
 function resetForPlay(b: BotState, s: SimState): void {
@@ -24,6 +25,7 @@ function resetForPlay(b: BotState, s: SimState): void {
   b.aimT = -1;
   b.target = -1;
   b.kickDelay = 0.1 + rnd(b) * 0.3;
+  b.aimTarget = 99;
 }
 
 /** Where a receiver will be `t` seconds from now, following their route. */
@@ -137,6 +139,19 @@ export function botInputs(s: SimState, b: BotState, seat: number): SimInput[] {
           break;
         }
       }
+      break;
+    }
+    case 'kickPower': {
+      if (s.control !== seat || !s.kick) break;
+      const k = s.kick;
+      const mid = (T.kick.greenLo + T.kick.greenHi) / 2;
+      if (s.t >= b.kickDelay && Math.abs(k.meter - mid) <= B.kickMeterSlop) out.push({ k: 'tap' });
+      break;
+    }
+    case 'kickAim': {
+      if (s.control !== seat || !s.kick) break;
+      if (b.aimTarget === 99) b.aimTarget = (rnd(b) * 2 - 1) * B.kickAimSlop;
+      if (Math.abs(s.kick.arrow - b.aimTarget) <= 0.05) out.push({ k: 'tap' });
       break;
     }
     default:

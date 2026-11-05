@@ -572,8 +572,7 @@ export function applyResult(prev: MatchState, r: PlayResult): MatchState {
 export function voidPlay(snapshot: MatchState): MatchState {
   const m = clone(snapshot);
   if (m.play && !isKickType(m.play.type) && m.play.type === 'scrimmage') {
-    const exclude = m.play.playbook;
-    offerScrimmage(m, exclude === undefined ? -1 : -1);
+    offerScrimmage(m);
   } else if (m.play) {
     m.playId += 1;
     m.play = { ...m.play, id: m.playId, seed: playSeed(m) };
@@ -587,26 +586,4 @@ export function currentController(m: MatchState): Seat | null {
   if (m.phase === 'choice4th' || m.phase === 'conversion') return m.possession;
   if (m.phase === 'kickChoice') return m.kicker;
   return null;
-}
-
-/** Temporary automatic kicks for M3. Replaced by real kick plays at M5. */
-export function autoKickResult(m: MatchState): PlayResult {
-  const play = m.play!;
-  const off = play.offense;
-  const base = (end: PlayResult['end'], spotX: number, possessor: Seat): PlayResult => ({
-    playId: play.id, type: play.type, end, spotX, possessor, offense: off, clock: m.clock, ezImpetus: false, lastCarrier: possessor, sack: false,
-    stats: [{ att: 0, comp: 0, passYds: 0, rushYds: 0, sacks: 0, int: 0, fumLost: 0, retYds: 0 }, { att: 0, comp: 0, passYds: 0, rushYds: 0, sacks: 0, int: 0, fumLost: 0, retYds: 0 }],
-    touches: [], armFatigue: [0, 0], injury: null, yards: 0, big: false,
-  });
-  const dir = m.attack[off];
-  const roll = (mixSeed(play.seed, 11) % 1000) / 1000;
-  switch (play.type) {
-    case 'extraPoint': return base('xpGood', play.los, off);
-    case 'fieldGoal': {
-      const good = fieldGoalInRange(m) && roll < 0.85;
-      return base(good ? 'fgGood' : 'fgMiss', play.los - dir * T.kick.kickerBehindLos, off);
-    }
-    case 'punt': return base('tackle', clampSpot(play.los + dir * 40), other(off));
-    default: return base('touchback', xFromOwn(T.rules.touchback, m.attack[other(off)]), other(off));
-  }
 }

@@ -1,6 +1,7 @@
 // One 60 Hz tick of the play simulation.
 import { T } from './tuning';
 import { checkContact, updateChaser, updateLoose } from './contact';
+import { kickTap, updateKickFlight, updateKickMeter, updateKickPlayer } from './kick';
 import { release, startAim, updateFlight } from './pass';
 import { applySwipe, doHandoff, doQbRun, updateCarrier } from './run';
 import { updateBlocker } from './ai/blocking';
@@ -17,7 +18,10 @@ const isDead = (s: SimState): boolean => s.phase === 'dead';
 
 function applyInput(s: SimState, inp: SimInput): void {
   switch (inp.k) {
-    case 'snap': if (s.phase === 'pre') snap(s); break;
+    case 'snap':
+      if (s.phase === 'pre') snap(s);
+      else if (s.phase === 'kickPower') kickTap(s, true);
+      break;
     case 'aimStart': startAim(s); break;
     case 'aim': if (s.aim.on) { s.aim.dx = inp.dx; s.aim.dy = inp.dy; } break;
     case 'bullet': if (s.aim.on && s.cfg.bullet) s.aim.bullet = true; break;
@@ -32,6 +36,7 @@ function applyInput(s: SimState, inp: SimInput): void {
       break;
     }
     case 'tap':
+      if (s.phase === 'kickPower' || s.phase === 'kickAim' || s.phase === 'kickFlight') { kickTap(s); break; }
       if (s.phase === 'run' && s.ezWait > 0 && s.players[s.ball.holder]?.seat === s.control) { s.ezWait = 0; s.ezRanOut = true; s.g.lastGestureAt = s.t; }
       break;
     default: break;
@@ -85,6 +90,7 @@ function updatePlayer(s: SimState, p: SimPlayer, dt: number): void {
     case 'lead': updateBlocker(s, p, dt); break;
     case 'pursue': updatePursuit(s, p, dt); break;
     case 'chase': updateChaser(s, p, dt); break;
+    case 'kicker': case 'kickCover': case 'return': updateKickPlayer(s, p, dt); break;
     default: stopMoving(p, dt); p.anim = A.stance;
   }
 }
@@ -129,6 +135,9 @@ export function step(s: SimState, inputs: readonly SimInput[] = []): void {
     return;
   }
   if (s.phase === 'pre') return;
+  if (s.phase === 'kickPower' || s.phase === 'kickAim') updateKickMeter(s, dt);
+  else if (s.phase === 'kickFlight') updateKickFlight(s, dt);
+  if (isDead(s)) return;
 
   if (s.phase === 'flight') updateFlight(s, dt);
   else if (s.phase === 'loose') updateLoose(s, dt);

@@ -4,10 +4,10 @@ import { DEFAULT_CONFIG, isValidConfigPatch, type MatchConfig } from '../shared/
 import { TEAM_BY_ID } from '../shared/data/teams';
 import type { ClientMsg, ErrorCode, RoomView, Seat, ServerMsg } from '../shared/protocol';
 import {
-  advanceBanner, afterCoinToss, applyAudible, applyChoice, applyResult, applySnap, applyTimeout, autoKickResult, canAudible, canTimeout, concede, createMatch, currentController,
+  advanceBanner, afterCoinToss, applyAudible, applyChoice, applyResult, applySnap, applyTimeout, canAudible, canTimeout, concede, createMatch, currentController,
   defaultChoice, isChoiceLegal, isResultValid, voidPlay, type MatchState,
 } from '../shared/rules/match';
-import { emptyStats, isKickType, type PlayEnd, type PlayResult } from '../shared/sim/state';
+import { emptyStats, type PlayEnd, type PlayResult } from '../shared/sim/state';
 import { T } from '../shared/sim/tuning';
 
 export interface Conn {
@@ -217,17 +217,12 @@ export class RoomCore {
   /** Runs after every change of phase: sets timers, tells both players, and saves. */
   private enterState(): void {
     const d = this.data!;
-    let m = d.match!;
+    const m = d.match!;
     d.dl.playClock = null;
     d.dl.banner = null;
     d.dl.watchdog = null;
     d.live = null;
     d.snapshot = null;
-    // Temporary automatic kicks, until M5 adds real ones.
-    while (m.phase === 'presnap' && m.play && isKickType(m.play.type)) {
-      m = applyResult(applySnap(m), autoKickResult(m));
-    }
-    d.match = m;
     if (m.phase === 'final') { d.waiting = false; d.canClaim = null; d.dl.reconnect = [null, null]; }
     else if (CHOICE_PHASES.has(m.phase) && !(this.present(0) && this.present(1))) {
       d.waiting = true;

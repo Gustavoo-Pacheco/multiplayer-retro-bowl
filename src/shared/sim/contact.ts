@@ -151,26 +151,31 @@ export function updateLoose(s: SimState, dt: number): void {
     const d = Math.hypot(p.x - b.x, p.y - b.y);
     if (d < bd) { bd = d; best = p; }
   }
-  if (best && bd <= F.recoverRadius && (s.forceRecover >= 0 || rnd(s) < F.recoverChance)) takeBall(s, best, 'fumble');
-  else if (best && s.phaseT > 7) takeBall(s, best, 'fumble'); // a safety net, so a play can't stall
+  const why = s.kick && !s.kick.caught ? 'onside' : 'fumble';
+  if (best && bd <= F.recoverRadius && (s.forceRecover >= 0 || rnd(s) < F.recoverChance)) takeBall(s, best, why);
+  else if (best && s.phaseT > F.maxLoose) takeBall(s, best, why); // a safety net, so a play can't stall
 }
 
 /** A player gains the ball from the air or the ground. */
-export function takeBall(s: SimState, p: SimPlayer, reason: 'int' | 'fumble'): void {
+export function takeBall(s: SimState, p: SimPlayer, reason: 'int' | 'fumble' | 'onside'): void {
   const b = s.ball;
   const turnover = p.seat !== s.possessor;
+  const onside = reason === 'onside';
+  if (onside) { s.kick!.caught = true; s.catchX = p.x; s.clockRun = true; }
   const prevSeat = s.possessor;
   b.holder = p.i;
   b.x = p.x; b.y = p.y; b.z = 1;
   s.possessor = p.seat;
   s.lastCarrier = p.seat;
   s.forceRecover = -1;
-  if (turnover) {
+  if (turnover && !onside) {
     if (reason === 'int') { s.stats[prevSeat].int += 1; s.ev |= EV.int; }
     else s.stats[prevSeat].fumLost += 1;
   }
   const dir = dirOf(s, p.seat);
   if (s.desc.type === 'twoPoint' && turnover) { endPlay(s, 'tryFailed'); return; }
+  // "Touchback only" has no returns, so a recovered onside kick stops there.
+  if (onside && !s.cfg.liveReturns) { endPlay(s, 'kickOut', p.x); return; }
   if (inOppEndZone(p.x, dir)) { endPlay(s, 'td'); return; }
   s.ezImpetus = turnover && inOwnEndZone(p.x, dir);
   beginRun(s);
@@ -179,10 +184,10 @@ export function takeBall(s: SimState, p: SimPlayer, reason: 'int' | 'fumble'): v
   else if (turnover) requestHandoff(s, p.seat, reason);
 }
 
-export function requestHandoff(s: SimState, to: Seat, reason: 'int' | 'fumble' | 'kick' | 'onside'): void {
+export function requestHandoff(s: SimState, to: Seat, reason: 'int' | 'fumble' | 'kick' | 'onside', freeze = true, spot?: number): void {
   const holder = s.ball.holder >= 0 ? s.players[s.ball.holder] : null;
-  s.handoff = { to, reason, spotX: holder ? holder.x : s.ball.x };
-  s.frozen = true;
+  s.handoff = { to, reason, spotX: spot ?? (holder ? holder.x : s.ball.x) };
+  s.frozen = freeze;
 }
 
 /** The server said the other player takes over. Run on the new controller's copy. */

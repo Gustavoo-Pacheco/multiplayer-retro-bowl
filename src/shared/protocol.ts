@@ -102,7 +102,7 @@ export function frameFromSim(s: SimState, into: Frame = emptyFrame()): Frame {
   into.bx = s.ball.x; into.by = s.ball.y; into.bz = s.ball.z;
   const kick = s.kick;
   if (kick && (s.phase === 'kickPower' || s.phase === 'kickAim')) {
-    into.ax = s.phase === 'kickPower' ? kick.meter : kick.power;
+    into.ax = kick.meter;
     into.ay = kick.arrow;
     into.aimOn = true;
   } else {
