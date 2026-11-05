@@ -109,7 +109,7 @@ export function applySwipe(s: SimState, dx: number, dy: number): void {
 }
 
 export function carrierSpeed(s: SimState, p: SimPlayer): number {
-  const loss = T.speed.staminaLoss * Math.min(1, p.ran / (T.speed.staminaYards * (0.5 + p.sta / 10)));
+  const loss = s.cfg.fatigue ? T.speed.staminaLoss * Math.min(1, p.ran / (T.speed.staminaYards * (0.5 + p.sta / 10))) : 0;
   const cond = s.cfg.fatigue ? 1 - T.speed.conditionWeight * (1 - p.cond) : 1;
   const g = s.g;
   let v = p.top * T.run.carryMult * (1 - loss) * cond * (1 - g.jukeLoss);

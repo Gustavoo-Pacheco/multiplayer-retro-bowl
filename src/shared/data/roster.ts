@@ -54,7 +54,8 @@ export function buildRoster(teamId: string, off: number, def: number): RosterPla
 
 export function topSpeed(spd: number, role: Role): number {
   const s = T.speed;
-  return (s.min + ((s.max - s.min) * (spd - 1)) / 9) * s.role[role];
+  const raw = s.min + ((s.max - s.min) * (spd - 1)) / 9;
+  return (s.spreadCenter + (raw - s.spreadCenter) * s.spread) * s.role[role];
 }
 
 export function armRange(arm: number): number {

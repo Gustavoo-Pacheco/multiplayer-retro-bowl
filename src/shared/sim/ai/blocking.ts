@@ -7,7 +7,7 @@ function nearestThreat(s: SimState, p: SimPlayer, protect: SimPlayer): SimPlayer
   let best: SimPlayer | null = null;
   let bd = 1e9;
   for (const q of s.players) {
-    if (q.seat === p.seat || q.stun > 0) continue;
+    if (q.seat === p.seat || q.stun > 0 || s.t < q.freeUntil) continue;
     if (q.engaged >= 0 && q.engaged !== p.i) continue;
     const dp = Math.hypot(q.x - p.x, q.y - p.y);
     const dq = Math.hypot(q.x - protect.x, q.y - protect.y);

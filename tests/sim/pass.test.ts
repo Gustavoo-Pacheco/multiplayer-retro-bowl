@@ -42,20 +42,20 @@ describe('formulas', () => {
     expect(interceptChance(1, 3)).toBe(T.chance.min);
   });
   it('catch odds match the plan', () => {
-    expect(catchChance(5, 0, false, 'clear', false)).toBeCloseTo(0.8);
-    expect(catchChance(5, 1, true, 'rain', true)).toBeCloseTo(0.8 - 0.25 - 0.15 - 0.1 - 0.15);
+    expect(catchChance(5, 0, false, 'clear', false)).toBeCloseTo(T.pass.catchBase + 5 * T.pass.catchPerAttr);
+    expect(catchChance(5, 1, true, 'rain', true)).toBeCloseTo(T.pass.catchBase + 5 * T.pass.catchPerAttr - 0.25 - 0.15 - 0.1 - 0.15);
     expect(catchChance(10, 0, false, 'clear', false)).toBeCloseTo(T.chance.max + 0.0, 1);
   });
   it('tackle odds match the plan', () => {
     expect(tackleChance(5, 5, 'side', false, false)).toBeCloseTo(0.5);
-    expect(tackleChance(8, 5, 'behind', false, false)).toBeCloseTo(0.88);
+    expect(tackleChance(8, 5, 'behind', false, false)).toBeCloseTo(T.contact.tackleBase + T.contact.tacklePerAttr * 3 + T.contact.behind);
     expect(tackleChance(5, 5, 'front', true, false)).toBeCloseTo(0.05);
     expect(tackleChance(5, 5, 'front', false, true)).toBeCloseTo(0.15);
     expect(tackleChance(5, 5, 'behind', false, true)).toBeCloseTo(0.9);
   });
   it('throw error follows accuracy', () => {
     expect(maxAimErrorDeg(10, 0)).toBe(0);
-    expect(maxAimErrorDeg(5, 0)).toBeCloseTo(3);
+    expect(maxAimErrorDeg(5, 0)).toBeCloseTo(5 * T.pass.errorPerAccuracyDeg);
   });
   it('sampled catch rate matches the formula', () => {
     let hits = 0;

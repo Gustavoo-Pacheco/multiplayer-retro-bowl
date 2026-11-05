@@ -1,6 +1,7 @@
 import { T } from '../tuning';
 import { A, type SimPlayer, type SimState } from '../state';
 import { moveTo } from './move';
+import { chaseSpeed } from './pursuit';
 
 /** Each DB or LB trails an assigned receiver, with lag from the difficulty table. */
 export function updateCover(s: SimState, p: SimPlayer, dt: number): void {
@@ -17,7 +18,7 @@ export function updateCover(s: SimState, p: SimPlayer, dt: number): void {
   const cushion = (short ? T.ai.coverCushionShort : T.ai.coverCushion) + (s.defCall === 'soft' ? T.ai.coverSoftExtra : 0);
   let tx = rc.x - rc.vx * lag + dir * cushion;
   const ty = rc.y - rc.vy * lag;
-  const speed = p.top * T.ai.coverSpeed;
+  const speed = chaseSpeed(p.top * T.ai.coverSpeed, rc.top, T.ai.coverFloor, T.ai.coverCeiling);
   const gap = (p.x - rc.x) * dir;
   // Stay downfield of a receiver who is still coming: hold the spot and let the route arrive.
   const coming = rc.vx * dir > 1;

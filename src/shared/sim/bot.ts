@@ -58,6 +58,7 @@ function chooseThrow(s: SimState, b: BotState): { dx: number; dy: number; openne
   const dir = s.desc.dir;
   let best: { dx: number; dy: number; openness: number } | null = null;
   let bestScore = -1e9;
+  const B = T.bot;
   for (const p of s.players) {
     if (p.seat !== qb.seat || p.role === 'OL' || p.role === 'QB' || p.job === 'block' || p.job === 'mesh') continue;
     let t = Math.hypot(p.x - qb.x, p.y - qb.y) / T.pass.speed;
@@ -77,8 +78,10 @@ function chooseThrow(s: SimState, b: BotState): { dx: number; dy: number; openne
       if (dd < open) open = dd;
     }
     const gain = (fx - s.desc.los) * dir;
-    const need = Math.max(1, Math.min(s.desc.toGo, 12));
-    const score = Math.min(open, 6) * 1.2 + Math.min(gain, need + 6) * 0.25 + rnd(b) * 1.5;
+    const need = Math.max(1, Math.min(s.desc.toGo, B.needCap));
+    // Like most players, it looks for an open man near the sticks rather than a bomb.
+    const value = gain <= need ? gain * B.valueShort : need * B.valueShort - (gain - need) * B.valueDeep;
+    const score = Math.min(open, 6) * B.valueOpen + value + rnd(b) * 1.5;
     if (score > bestScore) { bestScore = score; best = { dx: fx - qb.x, dy: fy - qb.y, openness: open }; }
   }
   return best;
@@ -100,7 +103,7 @@ export function botInputs(s: SimState, b: BotState, seat: number): SimInput[] {
       const qb = s.players[0];
       let pressure = 99;
       for (const d of s.players) if (d.seat !== qb.seat && d.engaged < 0) pressure = Math.min(pressure, Math.hypot(d.x - qb.x, d.y - qb.y));
-      if (b.aimT < 0 && (s.phaseT >= b.holdUntil || (pressure < 2.5 && rnd(b) < 0.08))) {
+      if (b.aimT < 0 && (s.phaseT >= b.holdUntil || (pressure < B.panicRange && rnd(b) < B.panicChance))) {
         out.push({ k: 'aimStart' });
         b.aimT = s.t;
       } else if (b.aimT >= 0) {

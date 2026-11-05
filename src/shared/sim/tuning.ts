@@ -16,6 +16,8 @@ export const T = {
 
   speed: {
     min: 6, max: 9, accel: 20,
+    /** Narrows the gap between fast and slow teams. 1 keeps the raw 6-9 range. */
+    spread: 0.25, spreadCenter: 7.5,
     role: { QB: 0.9, RB: 1, WR: 1, TE: 0.92, OL: 0.7, DL: 0.85, LB: 1.0, DB: 1.06, K: 0.78 } as Record<string, number>,
     staminaLoss: 0.15, staminaYards: 70, conditionWeight: 0.12, dropBackSpeed: 4.5,
   },
@@ -25,9 +27,9 @@ export const T = {
   pass: {
     speed: 25, bulletMult: 1.6, arcPerYard: 0.16, bulletArcPerYard: 0.05, minPeak: 0.8, throwHeight: 1.8, catchHeight: 1.2,
     rangeLo: 20, rangeHi: 65,
-    errorPerAccuracyDeg: 0.6, fatigueErrorDeg: 2.5,
-    armFatigueLo: 0.005, armFatigueHi: 0.02,
-    catchRadius: 2.5, catchBase: 0.55, catchPerAttr: 0.05, catchPerMiss: 0.25, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
+    errorPerAccuracyDeg: 0.4, fatigueErrorDeg: 2.5,
+    armFatigueLo: 0.005, armFatigueHi: 0.02, armFatigueMax: 0.25,
+    catchRadius: 2.5, catchBase: 0.66, catchPerAttr: 0.04, catchPerMiss: 0.25, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
     weatherPenalty: { clear: 0, rain: 0.1, snow: 0.15, wind: 0.05 } as Record<string, number>,
     pickBase: 0.1, pickPerAttr: 0.03, pickPerDist: 0.1,
     windDriftDeg: 2.0,
@@ -36,7 +38,7 @@ export const T = {
 
   contact: {
     radius: 0.85, retryCd: 0.9, missStun: 0.45, hitSlowTime: 0.3, hitSlowMult: 0.75, knockback: 0.6, fallForward: 0.5,
-    tackleBase: 0.5, tacklePerAttr: 0.06, behind: 0.2, headOn: -0.1,
+    tackleBase: 0.5, tacklePerAttr: 0.02, behind: 0.2, headOn: -0.1,
     stiff: -0.35, truckFront: -0.25, truckBehind: 0.2,
     fumbleBase: 0.01, fumblePerAttr: 0.004, fumbleLowCond: 0.01, fumbleWet: 0.005, fumbleDive: 0.02, fumbleHighMult: 2,
   },
@@ -57,11 +59,11 @@ export const T = {
     coverCushion: 1.1, coverCushionShort: 0.4, coverSoftExtra: 2.5, coverDepth: 6.5, coverDepthShort: 3.5, softDepthExtra: 2,
     backpedalUntil: 4, ballReact: 9, ballReactDelay: 0.3, coverSpeed: 1,
     blitzChance: 0.2, softChance: 0.25,
-    rushSpeed: 1, rushShedLo: 0.45, rushShedHi: 0.95, blockStrFactor: 0.05, pushBase: 0.45, pushPerStr: 0.1,
+    rushSpeed: 1, rushShedLo: 0.32, rushShedHi: 0.85, blockStrFactor: 0.03, pushBase: 0.45, pushPerStr: 0.1,
     freeRushSpeedCap: 7.2,
     pursuitLead: 1.0, pursuitLag: 0.15, pursuitSpeed: 1.02,
-    blockEngage: 1.1, blockHold: 0.75, blockHoldPerStr: 0.12, blockShedStun: 0.5, blockKeepOff: 0.9, blockFieldRange: 10,
-    teSlowBlock: 0.9, separate: 0.55,
+    blockEngage: 1.1, blockHold: 0.85, blockHoldPerStr: 0.06, blockShedStun: 0.5, blockKeepOff: 0.9, blockFieldRange: 10,
+    teSlowBlock: 0.9, separate: 0.55, reblockCd: 0.9, pursuitFloor: 1.5, pursuitCeiling: 1.7, coverFloor: -0.4, coverCeiling: 0.5,
     defenderMissAfterJuke: 0.2,
   },
 
@@ -110,8 +112,8 @@ export const T = {
     aimScale: 0.26, touchTargetMult: 2, touchRadius: 26,
   },
   bot: {
-    holdLo: 1.0, holdHi: 3.2, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.9, leadSteps: 8,
-    swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5, kickMeterSlop: 0.09, kickAimSlop: 0.22,
+    holdLo: 0.9, holdHi: 3.4, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.6, leadSteps: 8,
+    swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5, needCap: 7, valueShort: 0.3, valueDeep: 0.2, valueOpen: 1.2, panicRange: 2.5, panicChance: 0.05, kickMeterSlop: 0.09, kickAimSlop: 0.3,
   },
 };
 

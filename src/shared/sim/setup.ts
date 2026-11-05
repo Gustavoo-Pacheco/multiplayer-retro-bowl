@@ -14,7 +14,7 @@ export function makePlayer(i: number, seat: Seat, r: RosterPlayer, cond: number,
     i, seat, role: r.role, slot: r.slot, x, y, vx: 0, vy: 0, face, anim: 0,
     top: topSpeed(a.spd, r.role), str: a.str, tck: a.tck, cat: a.cat, blk: a.blk, sta: a.sta, cond,
     job: 'idle', target: -1, engaged: -1, shed: 0, route: null, routeI: 0, routeStop: false,
-    stun: 0, tackleCd: 0, ran: 0, ax: 0, ay: 0,
+    stun: 0, tackleCd: 0, ran: 0, ax: 0, ay: 0, freeUntil: 0,
   };
 }
 

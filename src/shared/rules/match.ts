@@ -518,7 +518,7 @@ function mergeResultStats(m: MatchState, r: PlayResult, used: number): void {
     const a = m.stats[s];
     const b = r.stats[s];
     a.att += b.att; a.comp += b.comp; a.passYds += b.passYds; a.rushYds += b.rushYds; a.sacks += b.sacks; a.int += b.int; a.fumLost += b.fumLost; a.retYds += b.retYds;
-    m.armFatigue[s] = Math.min(0.5, m.armFatigue[s] + (r.armFatigue[s] ?? 0));
+    m.armFatigue[s] = Math.min(T.pass.armFatigueMax, m.armFatigue[s] + (r.armFatigue[s] ?? 0));
   }
   m.stats[r.offense].top += used;
   for (const [seat, slot, delta] of r.touches) m.condition[seat][slot] = Math.max(0, Math.min(1, m.condition[seat][slot] + delta));

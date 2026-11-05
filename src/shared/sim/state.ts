@@ -87,6 +87,8 @@ export interface SimPlayer {
   job: Job; target: number; engaged: number; shed: number;
   route: number[] | null; routeI: number; routeStop: boolean;
   stun: number; tackleCd: number; ran: number; ax: number; ay: number;
+  /** A defender who just shed a block can't be blocked again until this time. */
+  freeUntil: number;
 }
 
 export interface BallState {

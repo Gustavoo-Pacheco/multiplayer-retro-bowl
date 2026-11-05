@@ -1,3 +1,4 @@
+import { T } from '../../src/shared/sim/tuning';
 import { describe, expect, it } from 'vitest';
 import { attrBase, adjustScore, armRange, buildRoster, topSpeed } from '../../src/shared/data/roster';
 import { formulaDef, formulaOff, TEAMS } from '../../src/shared/data/teams';
@@ -29,8 +30,14 @@ describe('roster', () => {
   it('matches the plan examples at base 3 and base 8', () => {
     expect(armRange(3)).toBeCloseTo(30);
     expect(armRange(8)).toBeCloseTo(55);
-    expect(topSpeed(3, 'RB')).toBeCloseTo(6.67, 1);
-    expect(topSpeed(8, 'RB')).toBeCloseTo(8.33, 1);
+    // The plan's 6.67 and 8.33 yd/s are the unscaled curve. Balance tuning narrows it around the centre (DECISIONS.md).
+    const saved = T.speed.spread;
+    T.speed.spread = 1;
+    const role = T.speed.role.RB;
+    expect(topSpeed(3, 'RB') / role).toBeCloseTo(6.67, 1);
+    expect(topSpeed(8, 'RB') / role).toBeCloseTo(8.33, 1);
+    T.speed.spread = saved;
+    expect(topSpeed(8, 'RB')).toBeGreaterThan(topSpeed(3, 'RB'));
   });
   it('is the same every time, and values stay within 1-10', () => {
     const a = buildRoster('SEA', 94, 99);
