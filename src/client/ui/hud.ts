@@ -5,7 +5,7 @@ import type { Seat } from '../../shared/sim/state';
 import { clear, h } from './dom';
 
 export interface HudActions {
-  audible(): void; timeout(): void; pause(): void; choice(c: Choice): void; concede(): void; claim(): void; skip(): void;
+  audible(): void; timeout(): void; pause(): void; choice(c: Choice): void; concede(): void; claim(): void; skip(): void; settings(): void; help(): void;
 }
 
 export class HudOverlay {
@@ -20,6 +20,7 @@ export class HudOverlay {
   private menuBtn: HTMLButtonElement;
   private menu: HTMLDivElement;
   private claimBtn: HTMLButtonElement;
+  private skipBtn: HTMLButtonElement;
 
   constructor(parent: HTMLElement, private a: HudActions) {
     this.root = h('div', { class: 'hud' });
@@ -28,6 +29,8 @@ export class HudOverlay {
     this.pauseBtn = h('button', { class: 'hud-btn hud-pause', testid: 'btn-pause', onclick: () => a.pause() }, '||');
     this.menuBtn = h('button', { class: 'hud-btn hud-menu', testid: 'btn-menu', onclick: () => this.menu.classList.toggle('open') }, '...');
     this.menu = h('div', { class: 'hud-popup' },
+      h('button', { testid: 'btn-settings', onclick: () => { this.menu.classList.remove('open'); a.settings(); } }, 'Settings'),
+      h('button', { testid: 'btn-help', onclick: () => { this.menu.classList.remove('open'); a.help(); } }, 'How to play'),
       h('button', { testid: 'btn-concede', onclick: () => { this.menu.classList.remove('open'); a.concede(); } }, 'Concede the match'),
     );
     this.buttons = h('div', { class: 'hud-buttons' }, this.audibleBtn, this.timeoutBtn);
@@ -35,7 +38,9 @@ export class HudOverlay {
     this.status = h('div', { class: 'hud-status', testid: 'hud-status' });
     this.claimBtn = h('button', { class: 'hud-claim', testid: 'claim-win', onclick: () => a.claim() }, 'CLAIM THE WIN');
     this.claimBtn.style.display = 'none';
-    this.root.append(this.buttons, this.pauseBtn, this.menuBtn, this.menu, this.dialog, this.status, this.claimBtn);
+    this.skipBtn = h('button', { class: 'hud-skip', testid: 'btn-skip', onclick: () => a.skip() }, 'SKIP >>');
+    this.skipBtn.style.display = 'none';
+    this.root.append(this.buttons, this.pauseBtn, this.menuBtn, this.menu, this.dialog, this.status, this.claimBtn, this.skipBtn);
     parent.append(this.root);
   }
 
@@ -89,6 +94,7 @@ export class HudOverlay {
   }
 
   setClaim(on: boolean): void { this.claimBtn.style.display = on ? '' : 'none'; }
+  setSkip(on: boolean): void { this.skipBtn.style.display = on ? '' : 'none'; }
 
   destroy(): void { this.root.remove(); }
 }

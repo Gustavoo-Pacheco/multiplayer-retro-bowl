@@ -74,7 +74,7 @@ export function checkContact(s: SimState, dt: number): boolean {
       const wasPocket = s.phase === 'pocket';
       r.anim = wasPocket ? A.sacked : A.tackled;
       if (wasPocket) d.anim = A.sack;
-      if (s.cfg.injuries && rnd(s) < T.run.injuryChance * (r.cond < 0.5 ? 2 : 1)) s.injury = [r.seat, r.slot];
+      if (s.cfg.injuries && rnd(s) < T.run.injuryChance * (r.cond < 0.5 ? 2 : 1)) { s.injury = [r.seat, r.slot]; r.anim = A.hurt; }
       if (inOppEndZone(r.x, dirSign)) endPlay(s, 'td');
       else endPlay(s, 'tackle');
       return true;

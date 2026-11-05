@@ -26,6 +26,7 @@ export type BannerKind = 'quarter' | 'half' | 'twoMin' | 'overtime' | 'touchdown
 export interface LastPlay {
   end: PlayResult['end']; type: PlayType; yards: number; possessor: Seat; offense: Seat; sack: boolean; big: boolean; turnover: boolean;
   firstDown: boolean; note: string; scored: number; turnoverOnDowns: boolean; safety: boolean; touchback: boolean;
+  playId: number; injury: [Seat, number] | null;
 }
 
 export interface MatchState {
@@ -61,6 +62,8 @@ export interface MatchState {
   ot: OtState | null;
   winner: Seat | 'tie' | null;
   banner: { kind: BannerKind; text: string } | null;
+  /** What follows a score banner or a replay. */
+  resume: { phase: MatchPhase; banner: MatchState['banner']; replay: boolean } | null;
   after: Next;
   condition: [number[], number[]];
   armFatigue: [number, number];
@@ -106,7 +109,7 @@ export function createMatch(config: MatchConfig, teams: [string, string], seed: 
     playId: 0, play: null, kicker: other(coinWinner), kickKind: 'kickoff',
     score: [0, 0], scoreByPeriod: [[0, 0, 0, 0], [0, 0, 0, 0]],
     timeouts: [0, 0], audibles: [config.audibles, config.audibles], pauses: [config.pauses, config.pauses],
-    coinWinner, openingKicker: other(coinWinner), ot: null, winner: null, banner: null, after: { k: 'scrimmage' },
+    coinWinner, openingKicker: other(coinWinner), ot: null, winner: null, banner: null, resume: null, after: { k: 'scrimmage' },
     condition: [new Array<number>(17).fill(1), new Array<number>(17).fill(1)],
     armFatigue: [0, 0], injured: [[], []], stats: [emptyTeamStats(), emptyTeamStats()], last: null, conceded: null,
   };
@@ -317,8 +320,45 @@ export function applyAudible(prev: MatchState, seat: Seat): MatchState {
 
 export function advanceBanner(prev: MatchState): MatchState {
   const m = clone(prev);
+  const r = m.resume;
+  if (r) {
+    if (m.phase === 'banner' && r.replay) { m.phase = 'replay'; m.banner = null; return m; }
+    m.phase = r.phase;
+    m.banner = r.banner;
+    m.resume = null;
+    return m;
+  }
   gotoNext(m);
   return m;
+}
+
+/** Puts a score banner and a replay between a play's result and whatever follows it. */
+export function presentResult(next: MatchState, r: PlayResult): MatchState {
+  const l = next.last;
+  if (!l) return next;
+  const mode = next.config.replays;
+  const anyScore = l.scored > 0 || l.safety;
+  const replay = mode !== 'off' && (r.big || (mode === 'all' && anyScore));
+  let banner: MatchState['banner'] = null;
+  if (l.safety) banner = { kind: 'score', text: 'SAFETY!' };
+  else if (l.type === 'twoPoint' && l.scored > 0) banner = { kind: 'score', text: 'TWO POINTS!' };
+  else if (r.end === 'td' && l.scored > 0) banner = { kind: 'touchdown', text: 'TOUCHDOWN!' };
+  else if (r.end === 'fgGood') banner = { kind: 'score', text: 'FIELD GOAL!' };
+  if (!banner && !replay) return next;
+  const m = clone(next);
+  m.resume = { phase: next.phase, banner: next.banner, replay: replay && !!banner };
+  m.phase = banner ? 'banner' : 'replay';
+  m.banner = banner;
+  return m;
+}
+
+/** Who has control once this break is over: the one player who may skip a replay. */
+export function nextController(m: MatchState): Seat {
+  const phase = m.resume?.phase ?? m.phase;
+  if (phase === 'presnap' && m.play) return m.play.offense;
+  if (phase === 'kickChoice') return m.kicker;
+  if (phase === 'banner' && m.after.k === 'kick') return m.after.kicker;
+  return m.possession;
 }
 
 export function concede(prev: MatchState, seat: Seat): MatchState {
@@ -551,6 +591,7 @@ export function applyResult(prev: MatchState, r: PlayResult): MatchState {
   m.last = {
     end: r.end, type: r.type, yards: r.yards, possessor: r.possessor, offense: r.offense, sack: r.sack, big: r.big, turnover,
     firstDown: f.firstDown, note: r.note ?? '', scored: f.scored, turnoverOnDowns: f.turnoverOnDowns, safety: f.safety, touchback: f.touchback,
+    playId: r.playId, injury: r.injury ?? null,
   };
   // Overtime: the ball changed hands with no score.
   if (m.ot && m.winner === null && f.scored === 0 && m.possession !== prevPos && (r.type === 'scrimmage' || r.type === 'punt' || r.type === 'fieldGoal')) otOnDriveEnd(m);

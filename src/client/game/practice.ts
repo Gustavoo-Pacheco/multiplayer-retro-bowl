@@ -12,6 +12,7 @@ import { T } from '../../shared/sim/tuning';
 import { aimFadeAlpha } from '../../shared/sim/pass';
 import { GestureRecognizer } from '../input/gestures';
 import { bindPointer } from '../input/pointer';
+import { teamKit } from '../art/palette';
 import { buildField } from '../render/field';
 import { drawScene, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
@@ -30,11 +31,8 @@ export function startPractice(parent: HTMLElement): void {
   const d = DIFFICULTY.normal;
   const cfg: SimCfg = { difficulty: 'normal', sackTime: d.sackTime, coverLag: d.coverLag, intRadius: d.intRadius, weather: 'clear', fumbleMult: 1, bullet: true, trucking: true, fatigue: true, injuries: false, penalties: true, liveReturns: true };
   const teams = { rosters, cond: [rosters[0].map(() => 1), rosters[1].map(() => 1)] as [number[], number[]], armFatigue: [0, 0] as [number, number] };
-  const kits: SceneInfo['kits'] = [
-    { helmet: offense.secondary, jersey: offense.primary, trim: offense.secondary, pants: '#e8e8e0' },
-    { helmet: defense.secondary, jersey: defense.primary, trim: defense.secondary, pants: '#e8e8e0' },
-  ];
-  const field = buildField({ leftColor: defense.primary, rightColor: offense.primary, leftName: defense.nick, rightName: offense.nick, trimLeft: '#fff', trimRight: '#fff' });
+  const kits: SceneInfo['kits'] = [teamKit(offense, false), teamKit(defense, false)];
+  const field = buildField({ left: defense, right: offense, home: offense, visitor: defense, weather: 'clear', seed: 1 });
   const banner = h('div', { class: 'hud-banner', testid: 'practice-banner' }, 'Tap to snap');
   stage.overlay.append(banner);
   const g = new GestureRecognizer();
@@ -57,6 +55,7 @@ export function startPractice(parent: HTMLElement): void {
     info = {
       desc, seats: sim.players.map((p) => p.seat), roles: sim.players.map((p) => p.role), kits,
       routes: sim.players.filter((p) => p.route).map((p) => ({ i: p.i, pts: p.route! })),
+      slots: sim.players.map((p) => p.slot), skins: sim.players.map((p) => p.slot % 4), stars: sim.players.map(() => false), names: sim.players.map(() => ''),
       firstDownX: desc.los + dir * desc.toGo, aimAlpha: aimFadeAlpha(sim, false), field,
     };
     cam.snap(desc.los + dir * T.view.camLead);

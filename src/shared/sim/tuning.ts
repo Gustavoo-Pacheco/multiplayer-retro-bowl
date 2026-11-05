@@ -100,10 +100,11 @@ export const T = {
 
   /** Server and client timers, in milliseconds. */
   timers: {
-    coinToss: 2800, banner: 2200, quarterBreak: 3000, halftime: 7000, twoMinute: 2200, replay: 6000, replayBig: 20,
+    coinToss: 2800, banner: 2200, scoreBanner: 2600, quarterBreak: 3000, halftime: 7000, twoMinute: 2200, replay: 6000, replayBig: 20,
     pause: 60000, watchdog: 5000, watchdogTick: 1000, cleanup: 2 * 3600 * 1000, handoffBanner: 600,
     choiceDefaultGrace: 300,
   },
+  replay: { rate: 0.8 },
   net: {
     frameMs: 50, bufferMs: 150, bufferMaxMs: 600, maxFrameBytes: 256, maxMsgPerSec: 60, backoffMin: 500, backoffMax: 5000, pingMs: 8000, pongTimeoutMs: 20000,
   },

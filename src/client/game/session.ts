@@ -1,8 +1,9 @@
 // The match on this device: runs the sim when this player has the ball, plays frames otherwise.
-import { encodeFrame, emptyFrame, frameFromSim, type Frame, type HandoffReason, type RoomView, type ServerMsg } from '../../shared/protocol';
+import { decodeFrame, encodeFrame, emptyFrame, frameFromSim, type Frame, type HandoffReason, type RoomView, type ServerMsg } from '../../shared/protocol';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { botChoice } from '../../shared/rules/coach';
-import { applySnap, simContext, type MatchState } from '../../shared/rules/match';
+import { applySnap, effectiveRoster, nextController, simContext, type MatchState } from '../../shared/rules/match';
+import { hashStr } from '../../shared/sim/rng';
 import { botInputs, newBot, type BotState } from '../../shared/sim/bot';
 import { acceptHandoff, continueWithAutoRunner } from '../../shared/sim/contact';
 import { aimFadeAlpha } from '../../shared/sim/pass';
@@ -15,13 +16,20 @@ import { bindKeyboard } from '../input/keyboard';
 import { bindPointer } from '../input/pointer';
 import { FrameBuffer } from '../net/buffer';
 import type { NetLike } from '../net/socket';
-import { buildField, type FieldArt } from '../render/field';
-import { drawStrip } from '../render/font';
+import { audio } from '../audio/engine';
+import { ATLAS } from '../art/atlas';
+import { lum, teamKit, type Kit } from '../art/palette';
+import { drawField, buildField, type FieldArt } from '../render/field';
+import { drawStrip, drawText } from '../render/font';
 import { drawHud } from '../render/hud';
-import { drawScene, type Kit, type SceneInfo } from '../render/scene';
+import { drawBanner, drawKickMeter, drawScoreboard, drawWeather } from '../render/overlays';
+import { drawScene, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
 import { Camera, screenX, screenY } from '../render/view';
 import { HudOverlay } from '../ui/hud';
+import { openHelp, openPrefs } from '../ui/panels';
+import { applyFullscreen, prefs } from '../ui/prefs';
+import { Presentation } from './presentation';
 
 export interface SessionOpts {
   local: boolean; bot: boolean; speed: number; dev: boolean;
@@ -29,15 +37,19 @@ export interface SessionOpts {
   onFinal(m: MatchState): void;
 }
 
-const WHITE = '#f4f4ee';
-
 export function kitsFor(m: MatchState): [Kit, Kit] {
-  const kit = (seat: Seat): Kit => {
-    const t = TEAM_BY_ID[m.teams[seat]];
-    if (m.away[seat]) return { helmet: t.primary, jersey: WHITE, trim: t.primary, pants: t.primary };
-    return { helmet: t.secondary, jersey: t.primary, trim: t.secondary, pants: WHITE };
+  return [teamKit(m.teams[0], m.away[0]), teamKit(m.teams[1], m.away[1])];
+}
+
+/** Sprite details for each player on the field: skin tone, star marker and name. */
+function rosterArt(s: SimState, m: MatchState): Pick<SceneInfo, 'skins' | 'stars' | 'names' | 'slots'> {
+  const rosters = [effectiveRoster(m, 0), effectiveRoster(m, 1)];
+  return {
+    skins: s.players.map((p) => (hashStr(`${m.teams[p.seat]}:${p.slot}`) >>> 0) % 4),
+    stars: s.players.map((p) => !!rosters[p.seat][p.slot]?.star),
+    names: s.players.map((p) => rosters[p.seat][p.slot]?.name ?? ''),
+    slots: s.players.map((p) => p.slot),
   };
-  return [kit(0), kit(1)];
 }
 
 export class Session {
@@ -66,7 +78,7 @@ export class Session {
   bannerEnd = 0;
   turnBanner = '';
   turnBannerEnd = 0;
-  commentary = '';
+  pres = new Presentation();
   private holdUntil = 0;
   private acc = 0;
   private lastFrameSent = 0;
@@ -90,6 +102,7 @@ export class Session {
       audible: () => this.sendAudible(), timeout: () => this.sendTimeout(), pause: () => this.net.send({ t: 'pause' }),
       choice: (c) => this.net.send({ t: 'choice', c }), concede: () => this.net.send({ t: 'concede' }),
       claim: () => this.net.send({ t: 'claimWin' }), skip: () => this.net.send({ t: 'skip' }),
+      settings: () => openPrefs(), help: () => openHelp(),
     });
     this.unbind.push(bindPointer(this.stage, this.gestures));
     this.unbind.push(bindKeyboard({
@@ -101,7 +114,13 @@ export class Session {
     this.raf = requestAnimationFrame((t) => this.loop(t));
     void this.acquireWakeLock();
     document.addEventListener('visibilitychange', this.onVisible);
+    audio.setSong(null);
+    audio.setCrowd(true);
+    this.stage.root.addEventListener('pointerdown', this.onFirstTap, { once: true });
   }
+
+  /** Fullscreen needs a tap, so it waits for the first one in the match. */
+  private onFirstTap = (): void => { if (prefs.fullscreen) applyFullscreen(); };
 
   private onVisible = (): void => { if (!document.hidden) void this.acquireWakeLock(); };
   private async acquireWakeLock(): Promise<void> {
@@ -118,6 +137,7 @@ export class Session {
     cancelAnimationFrame(this.raf);
     void this.wakeLock?.release().catch(() => {});
     document.removeEventListener('visibilitychange', this.onVisible);
+    audio.setCrowd(false);
     for (const u of this.unbind) u();
     this.hud.destroy();
     this.stage.destroy();
@@ -171,34 +191,17 @@ export class Session {
 
   onFrame(b: ArrayBuffer): void {
     if (this.sim && this.controlling()) return;
-    this.buffer.push(b);
+    const f = this.buffer.push(b);
+    if (f) this.pres.replay.add(f);
     this.stats.framesRecv += 1;
   }
 
   private setMatch(m: MatchState): void {
     const prev = this.match;
     this.match = m;
-    if (m.last && (!prev?.last || prev.playId !== m.playId)) this.commentary = this.describe(m);
+    if (!prev) ATLAS.prepare(kitsFor(m));
+    this.pres.onMatch(prev, m, this.opts.local ? null : this.seat, this.info, this.frame);
     if (m.phase === 'final') { this.sim = null; this.opts.onFinal(m); }
-  }
-
-  private describe(m: MatchState): string {
-    const l = m.last;
-    if (!l) return '';
-    if (l.note) return l.note;
-    if (l.safety) return 'SAFETY!';
-    if (l.end === 'td') return l.turnover ? 'RETURNED FOR A TOUCHDOWN!' : 'TOUCHDOWN!';
-    if (l.end === 'fgGood') return 'THE KICK IS GOOD!';
-    if (l.end === 'fgMiss') return 'NO GOOD!';
-    if (l.end === 'xpGood') return 'EXTRA POINT IS GOOD';
-    if (l.end === 'xpMiss') return 'EXTRA POINT NO GOOD';
-    if (l.turnoverOnDowns) return 'TURNOVER ON DOWNS';
-    if (l.end === 'incomplete') return 'INCOMPLETE';
-    if (l.end === 'pi') return 'PASS INTERFERENCE. AUTOMATIC FIRST DOWN';
-    if (l.touchback) return 'TOUCHBACK';
-    if (l.sack) return `SACKED FOR ${Math.abs(l.yards)}`;
-    if (l.firstDown) return `FIRST DOWN! GAIN OF ${l.yards}`;
-    return l.yards >= 0 ? `GAIN OF ${l.yards}` : `LOSS OF ${-l.yards}`;
   }
 
   private buildInfo(desc: PlayDesc, s: SimState, m: MatchState): SceneInfo {
@@ -208,6 +211,7 @@ export class Session {
       routes: s.players.filter((p) => p.route && (p.job === 'route' || p.job === 'mesh')).map((p) => ({ i: p.i, pts: p.route! })),
       firstDownX: firstDown !== null && firstDown > 10 && firstDown < 110 ? firstDown : null,
       aimAlpha: aimFadeAlpha(s, m.config.aimCursor === 'full'), field: this.fieldFor(m),
+      ...rosterArt(s, m),
     };
   }
 
@@ -217,9 +221,10 @@ export class Session {
     const key = `${m.teams[leftSeat]}:${m.teams[rightSeat]}`;
     let art = this.fieldCache.get(key);
     if (!art) {
-      const l = TEAM_BY_ID[m.teams[leftSeat]];
-      const r = TEAM_BY_ID[m.teams[rightSeat]];
-      art = buildField({ leftColor: l.primary, rightColor: r.primary, leftName: l.nick, rightName: r.nick, trimLeft: l.secondary, trimRight: r.secondary });
+      art = buildField({
+        left: TEAM_BY_ID[m.teams[leftSeat]], right: TEAM_BY_ID[m.teams[rightSeat]], home: TEAM_BY_ID[m.teams[0]], visitor: TEAM_BY_ID[m.teams[1]],
+        weather: m.weather, seed: hashStr(`${m.teams[0]}:${m.teams[1]}`),
+      });
       this.fieldCache.set(key, art);
     }
     return art;
@@ -236,6 +241,7 @@ export class Session {
     this.hasFrame = true;
     this.live = false;
     this.buffer.reset(play.id);
+    this.pres.startPlay();
     this.sentSnap = false;
     this.handoffSent = false;
     this.resultSent = false;
@@ -302,6 +308,7 @@ export class Session {
     this.holdUntil = performance.now() + T.timers.handoffBanner / this.opts.speed;
     this.turnBanner = 'YOUR BALL!';
     this.turnBannerEnd = this.holdUntil;
+    audio.play('confirm');
     if (navigator.vibrate) { try { navigator.vibrate(120); } catch { /* optional */ } }
   }
 
@@ -371,6 +378,7 @@ export class Session {
       const o = this.buffer.out;
       this.frame = o;
       this.hasFrame = true;
+      if (this.buffer.evPending) { this.pres.onEvents(this.buffer.evPending, o); this.buffer.evPending = 0; }
       this.stats.watcherUnderruns = this.buffer.underruns;
       this.stats.watcherFrames = this.buffer.received;
       this.stats.worstHold = this.buffer.worstHoldMs;
@@ -402,6 +410,8 @@ export class Session {
       if (this.match?.phase === 'presnap') { this.match = applySnap(this.match); s.clock = this.match.clock; }
       this.net.send({ t: 'snap', playId: s.desc.id });
     }
+    if (s.ev) { frameFromSim(s, this.frame); this.pres.onEvents(s.ev, this.frame); }
+    if (s.phase === 'kickPower') { frameFromSim(s, this.frame); this.pres.meterTick(this.frame); }
     this.sendEv |= s.ev;
     s.ev = 0;
     if (this.sentSnap && now - this.lastFrameSent >= T.net.frameMs) {
@@ -409,7 +419,9 @@ export class Session {
       frameFromSim(s, this.frame);
       this.frame.ev = this.sendEv;
       this.sendEv = 0;
-      this.net.sendFrame(encodeFrame(this.frame));
+      const bytes = encodeFrame(this.frame);
+      this.net.sendFrame(bytes);
+      this.pres.replay.add(decodeFrame(bytes));
       this.stats.framesSent += 1;
     }
     if (s.handoff && !this.handoffSent) {
@@ -428,6 +440,11 @@ export class Session {
   private botDecisions(now: number): void {
     if (!this.opts.bot || !this.match || this.paused || this.waiting) return;
     const m = this.match;
+    // A bot has seen enough, and skips replays as a person may.
+    if (m.phase === 'replay') {
+      if ((this.opts.local || nextController(m) === this.seat) && now >= this.botChoiceAt) { this.botChoiceAt = now + 300; this.net.send({ t: 'skip' }); }
+      return;
+    }
     if (m.phase === 'choice4th' || m.phase === 'conversion' || m.phase === 'kickChoice') {
       if (!this.isMyDecision() || now < this.botChoiceAt) return;
       this.botChoiceAt = now + 300;
@@ -442,27 +459,43 @@ export class Session {
     const ctx = this.stage.ctx;
     const m = this.match;
     if (!m) { ctx.fillStyle = '#14202c'; ctx.fillRect(0, 0, 640, 360); return; }
-    const f = this.frame;
+    const replay = m.phase === 'replay' ? this.pres.replay.update(dtMs * this.opts.speed) : null;
+    const f = replay ?? this.frame;
+    this.pres.update(dtMs / 1000, m, f, now);
     const info = this.info ?? this.placeholderInfo(m);
     info.field = this.fieldFor(m);
     const camTarget = (this.hasFrame ? f.bx : m.ballX) + (m.attack[m.possession] ?? 1) * T.view.camLead;
     this.cam.follow(camTarget, dtMs / 1000);
     if (!this.controlling()) info.aimAlpha = 1;
-    if (this.hasFrame && this.info) drawScene(ctx, f, info, this.cam.x);
-    else { ctx.drawImage(info.field.canvas, Math.round(-(this.cam.x * (640 / 48) + 6 * (640 / 48) - 320)), 0); }
+    if (this.hasFrame && this.info) {
+      drawScene(ctx, f, info, this.cam.x, this.pres.sceneOpts(m, info, f, now));
+      this.pres.fx.drawWorld(ctx, this.cam.x);
+    } else drawField(ctx, info.field, this.cam.x);
+    drawWeather(ctx, m.weather, now);
     const live = this.sim && this.sim.phase !== 'pre' ? this.sim.clock : m.clock;
     const pc = this.playClockEnd === null ? null : Math.max(0, (this.playClockEnd - now) / 1000);
     drawHud(ctx, m, this.hasFrame && this.frame.phase !== 'pre' && m.phase === 'live' ? this.frame.clock : live, pc, this.opts.local ? null : this.seat);
     this.drawOverlays(ctx, m, now);
+    if (replay) this.drawReplayFrame(ctx, now);
+    this.pres.fx.drawScreen(ctx);
     const acting = this.actingSeat();
     this.hud.update(m, acting, this.isMyDecision(), this.paused, this.waiting);
+    this.hud.setSkip(m.phase === 'replay' && (this.opts.local || nextController(m) === this.seat));
     this.hud.setStatus(this.statusText(m));
     this.hud.setClaim(!this.opts.local && m.phase !== 'final' && this.waitingInfo?.canClaim === this.seat && this.seat !== null);
   }
 
+  private drawReplayFrame(ctx: CanvasRenderingContext2D, now: number): void {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 14, 640, 14);
+    ctx.fillRect(0, 346, 640, 14);
+    if (Math.floor(now / 500) % 2 === 0) { ctx.fillStyle = '#ff3b30'; ctx.fillRect(12, 18, 6, 6); }
+    drawText(ctx, 'REPLAY', 24, 18, '#fff');
+  }
+
   private placeholderInfo(m: MatchState): SceneInfo {
     const desc: PlayDesc = { id: 0, type: 'kickoff', seed: 0, offense: 0, dir: 1, los: m.ballX, down: 1, toGo: 10, playbook: 0, clock: m.clock };
-    return { desc, seats: [], roles: [], kits: kitsFor(m), routes: [], firstDownX: null, aimAlpha: 1, field: this.fieldFor(m) };
+    return { desc, seats: [], roles: [], slots: [], kits: kitsFor(m), routes: [], firstDownX: null, aimAlpha: 1, field: this.fieldFor(m), skins: [], stars: [], names: [] };
   }
 
   private drawOverlays(ctx: CanvasRenderingContext2D, m: MatchState, now: number): void {
@@ -471,60 +504,31 @@ export class Session {
     const sim = this.sim;
     if (m.phase === 'coinToss') {
       const name = TEAM_BY_ID[m.teams[m.coinWinner]].nick.toUpperCase();
-      drawStrip(ctx, 'COIN TOSS', 320, 130, '#ffd23f', 2);
-      drawStrip(ctx, `${name} WIN THE TOSS AND RECEIVE`, 320, 170);
+      drawBanner(ctx, 'COIN TOSS', 'quarter', `${name} WIN THE TOSS AND RECEIVE`, null, 1000);
     } else if (m.phase === 'banner' && m.banner) {
-      drawStrip(ctx, m.banner.text, 320, 140, '#ffd23f', 2);
-    } else if (m.phase === 'final') {
-      drawStrip(ctx, 'FINAL', 320, 140, '#ffd23f', 2);
+      const scoring = m.banner.kind === 'touchdown' || m.banner.kind === 'score';
+      const team = scoring && m.last ? m.teams[m.last.possessor] : null;
+      const sub = team ? TEAM_BY_ID[team].nick.toUpperCase() : m.banner.kind === 'half' ? 'HALFTIME SCORES' : '';
+      drawBanner(ctx, m.banner.text, m.banner.kind, sub, team, this.pres.bannerAge(now));
+      if (m.banner.kind === 'half') drawScoreboard(ctx, m);
     } else if (sim && this.controlling()) {
       if (sim.phase === 'pre') bottom = 'TAP TO SNAP. TAP THE RB TO HAND OFF, THE QB TO RUN';
       else if (sim.phase === 'kickPower') bottom = 'TAP IN THE GREEN FOR POWER';
       else if (sim.phase === 'kickAim') bottom = 'TAP AS THE ARROW CROSSES THE MIDDLE';
       else if (sim.phase === 'pocket') bottom = sim.aim.on ? 'RELEASE TO THROW' : 'DRAG BACK TO AIM';
       else if (sim.ezWait > 0) bottom = 'TAP TO RUN IT OUT';
-    } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && !mine) {
+    } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && m.phase !== 'final' && !mine) {
       bottom = `WATCHING: ${TEAM_BY_ID[m.teams[this.controllerOf(m)]].id} ON OFFENSE`;
     }
-    if (this.commentary && m.phase !== 'live' && m.phase !== 'coinToss' && m.phase !== 'final') {
-      const col = m.last ? TEAM_BY_ID[m.teams[m.last.possessor]].primary : '#000';
-      drawStrip(ctx, this.commentary, 320, 26, '#fff', 1, col);
+    const c = this.pres.commentary;
+    if (c && m.phase !== 'live' && m.phase !== 'coinToss' && m.phase !== 'final' && m.phase !== 'banner' && m.phase !== 'replay' && m.last) {
+      const team = TEAM_BY_ID[m.teams[m.last.possessor]];
+      drawStrip(ctx, c, 320, 24, lum(team.primary) > 0.62 ? '#14181c' : '#fff', 1, team.primary);
     }
     if (bottom) drawStrip(ctx, bottom, 320, 340);
-    this.drawKickMeter(ctx);
-    if (now < this.turnBannerEnd) drawStrip(ctx, this.turnBanner, 320, 140, '#ffd23f', 3);
-  }
-
-  private drawKickMeter(ctx: CanvasRenderingContext2D): void {
     const f = this.frame;
-    if (!this.hasFrame || (f.phase !== 'kickPower' && f.phase !== 'kickAim')) return;
-    const K = T.kick;
-    const x = 590;
-    const top = 90;
-    const h = 170;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x - 3, top - 3, 22, h + 6);
-    ctx.fillStyle = '#44525e';
-    ctx.fillRect(x, top, 16, h);
-    ctx.fillStyle = '#58d68d';
-    ctx.fillRect(x, top + h * (1 - K.greenHi), 16, h * (K.greenHi - K.greenLo));
-    const pw = f.ax;
-    ctx.fillStyle = '#ffd23f';
-    ctx.fillRect(x - 3, Math.round(top + h * (1 - pw)) - 1, 22, 3);
-    if (f.phase === 'kickAim') {
-      // The arrow swings across the middle, which points at the goal.
-      const cx = 320;
-      const y = 300;
-      const w = 130;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(cx - w - 4, y - 4, w * 2 + 8, 16);
-      ctx.fillStyle = '#44525e';
-      ctx.fillRect(cx - w, y, w * 2, 8);
-      ctx.fillStyle = '#58d68d';
-      ctx.fillRect(cx - 12, y, 24, 8);
-      ctx.fillStyle = '#ffd23f';
-      ctx.fillRect(Math.round(cx + f.ay * w) - 2, y - 4, 4, 16);
-    }
+    if (this.hasFrame && (f.phase === 'kickPower' || f.phase === 'kickAim') && m.phase !== 'replay') drawKickMeter(ctx, f);
+    if (now < this.turnBannerEnd) drawStrip(ctx, this.turnBanner, 320, 140, '#ffd23f', 3);
   }
 
   private statusText(m: MatchState): string {

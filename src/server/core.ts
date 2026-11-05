@@ -5,7 +5,7 @@ import { TEAM_BY_ID } from '../shared/data/teams';
 import type { ClientMsg, ErrorCode, RoomView, Seat, ServerMsg } from '../shared/protocol';
 import {
   advanceBanner, afterCoinToss, applyAudible, applyChoice, applyResult, applySnap, applyTimeout, canAudible, canTimeout, concede, createMatch, currentController,
-  defaultChoice, isChoiceLegal, isResultValid, voidPlay, type MatchState,
+  defaultChoice, isChoiceLegal, isResultValid, nextController, presentResult, voidPlay, type MatchState,
 } from '../shared/rules/match';
 import { emptyStats, type PlayEnd, type PlayResult } from '../shared/sim/state';
 import { T } from '../shared/sim/tuning';
@@ -237,7 +237,7 @@ export class RoomCore {
       case 'coinToss': d.dl.banner = this.host.now() + t.coinToss; break;
       case 'banner': {
         const kind = m.banner?.kind;
-        d.dl.banner = this.host.now() + (kind === 'half' ? t.halftime : kind === 'quarter' ? t.quarterBreak : kind === 'twoMin' ? t.twoMinute : t.banner);
+        d.dl.banner = this.host.now() + (kind === 'half' ? t.halftime : kind === 'quarter' ? t.quarterBreak : kind === 'twoMin' ? t.twoMinute : kind === 'touchdown' || kind === 'score' ? t.scoreBanner : t.banner);
         break;
       }
       case 'replay': d.dl.banner = this.host.now() + t.replay; break;
@@ -377,7 +377,7 @@ export class RoomCore {
         this.enterState();
         return;
       case 'skip':
-        if (match.phase === 'replay' && this.nextController(match) === seat) this.bannerDone();
+        if (match.phase === 'replay' && nextController(match) === seat) this.bannerDone();
         return;
       default: break;
     }
@@ -413,11 +413,6 @@ export class RoomCore {
       case 'playResult': this.onResult(conn, m.result); return;
       default: this.err(conn, 'badmsg');
     }
-  }
-
-  private nextController(m: MatchState): Seat | null {
-    if (m.after.k === 'kick') return m.after.kicker;
-    return m.possession;
   }
 
   private withinRate(conn: Conn): boolean {
@@ -457,7 +452,7 @@ export class RoomCore {
     const d = this.data!;
     const m = d.match!;
     if (!d.live || !isResultValid(m, r)) { this.err(conn, 'badmsg', 'bad result'); return; }
-    d.match = applyResult(m, r);
+    d.match = presentResult(applyResult(m, r), r);
     this.enterState();
   }
 

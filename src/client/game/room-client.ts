@@ -1,4 +1,6 @@
 // One room on this device: the socket, then the lobby or the match, whichever the server says.
+import { audio } from '../audio/engine';
+import { openHelp, openPrefs } from '../ui/panels';
 import { isValidConfigPatch, type MatchConfig } from '../../shared/data/config';
 import type { MatchState } from '../../shared/rules/match';
 import type { RoomView, Seat, ServerMsg } from '../../shared/protocol';
@@ -101,15 +103,15 @@ export class RoomClient {
   private render(room: RoomView): void {
     if (room.screen === 'lobby') {
       if (this.session) { this.session.destroy(); this.session = null; this.finalEl = null; }
+      audio.setSong('title');
       if (!this.lobby) {
         this.lobby = new Lobby(this.parent, this.o.code, {
           setConfig: (patch) => this.net.send({ t: 'setConfig', patch }),
           pickTeam: (team) => this.net.send({ t: 'pickTeam', team }),
           ready: (ready) => this.net.send({ t: 'ready', ready }),
           ptr: (x, y) => this.net.send({ t: 'ptr', x, y }),
-          sound: () => { /* M7 */ },
-          soundOn: () => true,
-          help: () => { /* M7 */ },
+          sound: () => openPrefs(),
+          help: () => openHelp(),
         });
       }
       this.lobby.update(room, this.seat);

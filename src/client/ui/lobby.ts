@@ -11,7 +11,6 @@ export interface LobbyActions {
   ready(on: boolean): void;
   ptr(x: number, y: number): void;
   sound(): void;
-  soundOn(): boolean;
   help(): void;
 }
 
@@ -83,8 +82,7 @@ export class Lobby {
       if (navigator.clipboard) void navigator.clipboard.writeText(link).then(done, () => prompt('Invite link', link));
       else prompt('Invite link', link);
     } }, 'Copy invite link');
-    this.soundBtn = h('button', { testid: 'sound', class: 'small', onclick: () => { a.sound(); this.syncSound(); } }, 'Sound');
-    this.syncSound();
+    this.soundBtn = h('button', { testid: 'sound', class: 'small', onclick: () => a.sound() }, 'Sound');
     this.root = h('div', { class: 'lobby', testid: 'lobby' },
       h('header', { class: 'lobby-top' },
         h('span', { class: 'brand' }, 'BORG BOWL'),
@@ -103,8 +101,6 @@ export class Lobby {
     });
     parent.append(this.root);
   }
-
-  private syncSound(): void { this.soundBtn.textContent = this.a.soundOn() ? 'Sound on' : 'Sound off'; }
 
   showRivalPointer(x: number, y: number): void {
     this.rivalDot.style.display = 'block';

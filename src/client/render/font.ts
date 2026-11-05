@@ -21,6 +21,9 @@ for (const [ch, hex] of Object.entries(GLYPHS)) {
   parsed.set(ch, rows);
 }
 
+/** The glyph bitmaps by character, one number per row. tools/make-font.ts builds the menu font from these. */
+export const GLYPH_ROWS: Record<string, number[]> = Object.fromEntries(parsed);
+
 export const CHAR_W = 6;
 export const CHAR_H = 7;
 

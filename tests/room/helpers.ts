@@ -12,7 +12,8 @@ export async function pair(open: TestClient[], cfg: Partial<MatchConfig> = {}, t
   const b = await joined(code, 'Bob');
   open.push(a, b);
   a.send({ t: 'setConfig', patch: { replays: 'off', ...cfg } });
-  await b.wait('room', (m) => m.room.config.replays === 'off');
+  const replays = cfg.replays ?? 'off';
+  await b.wait('room', (m) => m.room.config.replays === replays);
   return {
     a, b, code,
     start: async () => {
