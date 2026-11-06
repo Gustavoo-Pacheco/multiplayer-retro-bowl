@@ -6,7 +6,7 @@ import { TEAM_BY_ID } from '../data/teams';
 import { mixSeed } from '../sim/rng';
 import { isKickType, type PlayDesc, type PlayResult, type PlayStats, type PlayType, type Seat, type SimCfg, type SimTeams } from '../sim/state';
 import { T } from '../sim/tuning';
-import { checkTwoMinute, quarterSeconds, runoffSeconds, settleRunoff, timeoutsPerHalf, twoMinuteMark } from './clock';
+import { checkTwoMinute, clockRuns, quarterSeconds, runoffSeconds, settleRunoff, timeoutsPerHalf, twoMinuteMark } from './clock';
 import { advanceDowns, clampSpot, setFirstDown, setTouchback, xFromOwn, yardsToGoal } from './downs';
 import { coachDefense, coachOffense, type Situation } from './playcall';
 import { otOnDriveEnd, type OtState } from './overtime';
@@ -170,7 +170,7 @@ function playSeed(m: MatchState): number { return mixSeed(m.seed, m.playId); }
 
 function makeDesc(m: MatchState, type: PlayType, offense: Seat, los: number, playbook = 0, defense = 0): PlayDesc {
   const scrimmage = type === 'scrimmage';
-  const clock = scrimmage && m.runoffPending ? m.clock - runoffSeconds(m) : m.clock;
+  const clock = scrimmage && m.runoffPending && !clockRuns(m) ? m.clock - runoffSeconds(m) : m.clock;
   return { id: m.playId, type, seed: playSeed(m), offense, dir: m.attack[offense], los, down: m.down, toGo: m.toGo, playbook, defense, clock };
 }
 
@@ -267,7 +267,8 @@ export function afterCoinToss(prev: MatchState): MatchState {
 
 export function applySnap(prev: MatchState): MatchState {
   const m = clone(prev);
-  if (m.play && m.play.type === 'scrimmage' && m.runoffPending) {
+  // A running clock has already counted the real time since the last play, in runClock.
+  if (m.play && m.play.type === 'scrimmage' && m.runoffPending && !clockRuns(m)) {
     const run = runoffSeconds(m);
     m.clock = Math.max(0, m.clock - run);
     m.stats[m.possession].top += run;
@@ -275,6 +276,42 @@ export function applySnap(prev: MatchState): MatchState {
   m.runoffPending = false;
   if (m.play) m.play.clock = m.clock;
   m.phase = 'live';
+  return m;
+}
+
+/** The phases between plays when a running clock can be running. */
+const DEAD_BALL: ReadonlySet<MatchPhase> = new Set<MatchPhase>(['huddle', 'presnap', 'choice4th', 'conversion', 'kickChoice', 'banner', 'replay']);
+
+/** True when a running clock is counting down between plays. The room also stops it for pauses and reconnects. */
+export function clockRunningNow(m: MatchState): boolean {
+  return clockRuns(m) && m.runoffPending && m.clock > 0 && DEAD_BALL.has(m.phase);
+}
+
+/** Takes real seconds between plays off a running clock, as time of possession for the team with the ball. */
+export function runClock(prev: MatchState, seconds: number): MatchState {
+  if (!clockRunningNow(prev) || !(seconds > 0)) return prev;
+  const m = clone(prev);
+  const used = Math.min(m.clock, seconds);
+  m.clock -= used;
+  m.stats[m.possession].top += used;
+  if (m.play) m.play.clock = m.clock;
+  return m;
+}
+
+/** A running clock reached 0:00 between plays. The quarter ends there, but a conversion after a touchdown is still played. */
+export function expireClock(prev: MatchState): MatchState {
+  if (!clockRuns(prev) || prev.clock > 0 || !DEAD_BALL.has(prev.phase)) return prev;
+  const m = clone(prev);
+  m.clock = 0;
+  m.runoffPending = false;
+  if (m.play) m.play.clock = 0;
+  if (m.after.k === 'conversion') return m;
+  m.huddle = null;
+  m.play = null;
+  m.resume = null;
+  m.banner = null;
+  m.chosen4th = false;
+  endPeriod(m);
   return m;
 }
 
@@ -658,14 +695,16 @@ export function isResultValid(m: MatchState, r: PlayResult): boolean {
   if (!m.play || r.playId !== m.play.id || r.type !== m.play.type) return false;
   if (!(r.spotX >= 0 && r.spotX <= T.field.len)) return false;
   if (r.possessor !== 0 && r.possessor !== 1) return false;
-  if (!(r.clock <= m.clock + 0.01) || r.clock < 0) return false;
+  if (!(r.clock <= m.clock + (clockRuns(m) ? T.clock.snapSlack : 0.01)) || r.clock < 0) return false;
   return true;
 }
 
 export function applyResult(prev: MatchState, r: PlayResult): MatchState {
   const m = clone(prev);
-  const used = Math.max(0, m.clock - r.clock);
-  m.clock = r.clock;
+  // A running clock can read a moment higher on the controller's screen, and never winds back up.
+  const end = clockRuns(m) ? Math.min(r.clock, m.clock) : r.clock;
+  const used = Math.max(0, m.clock - end);
+  m.clock = end;
   mergeResultStats(m, r, used);
   const prevPos = m.possession;
   const f: Flags = { clockRunning: false, firstDown: false, scored: 0, turnoverOnDowns: false, safety: false, touchback: false };
@@ -685,7 +724,7 @@ export function applyResult(prev: MatchState, r: PlayResult): MatchState {
   // Overtime: the ball changed hands with no score.
   if (m.ot && m.winner === null && f.scored === 0 && m.possession !== prevPos && (r.type === 'scrimmage' || r.type === 'punt' || r.type === 'fieldGoal')) otOnDriveEnd(m);
   if (m.winner !== null) { finish(m); return m; }
-  settleRunoff(m, f.clockRunning);
+  settleRunoff(m, f.clockRunning || clockRuns(m));
   // A conversion after a touchdown is still played at 0:00.
   if (m.after.k === 'conversion') { gotoNext(m); return m; }
   if (m.clock <= 0) { endPeriod(m); return m; }

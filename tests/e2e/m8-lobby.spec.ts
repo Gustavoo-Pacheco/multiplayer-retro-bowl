@@ -82,7 +82,7 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
 
       // Settings keep each option on one line, and booleans read the same way round.
       await a.page.getByTestId('tab-settings').click();
-      await expect(a.page.locator('.cfg-row')).toHaveCount(22);
+      await expect(a.page.locator('.cfg-row')).toHaveCount(23);
       await noLeftoverPixels(a.page, 'switching to settings');
       expect(await clipped(a.page), 'settings').toEqual([]);
       await noSidewaysScroll(a.page, 'settings');
@@ -92,6 +92,17 @@ for (const [size, view] of [['desktop', DESKTOP], ['phone', PHONE]] as const) {
         const words = await a.page.locator(`[data-testid^="cfg-${key}-"]`).allTextContents();
         expect(words, key).toEqual(['Off', 'On']);
       }
+
+      // Sprint turns on the running clock and sudden death, and Standard puts them back.
+      await a.page.getByTestId('preset-sprint').click();
+      await expect(a.page.getByTestId('cfg-clock-runs')).toHaveClass(/\bon\b/);
+      await expect(a.page.getByTestId('cfg-overtime-sudden')).toHaveClass(/\bon\b/);
+      await expect(a.page.getByTestId('estimate')).toContainText('6 min');
+      await expect(a.page.getByTestId('preset-quick')).not.toHaveClass(/\bon\b/);
+      expect(await clipped(a.page), 'settings with Sprint').toEqual([]);
+      await a.page.getByTestId('preset-standard').click();
+      await expect(a.page.getByTestId('cfg-clock-stops')).toHaveClass(/\bon\b/);
+      await expect(a.page.getByTestId('cfg-overtime-standard')).toHaveClass(/\bon\b/);
 
       // A guest sees the same settings but can't change them.
       await b.page.getByTestId('tab-settings').click();

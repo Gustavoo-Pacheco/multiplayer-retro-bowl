@@ -5,6 +5,7 @@ Every match setting, and what checks it. `rules` is `tests/rules/settings.test.t
 | Setting | Options | Checked by |
 | --- | --- | --- |
 | Quarter length | 1, 2, 3, 5 | rules: clock, runoff, warning and timeouts per option |
+| Game clock | stops, runs | rules: runs keeps going after an incompletion, counts real time instead of the runoff, stops for a timeout, ends the quarter at 0:00 between plays and still plays a conversion. room: counts down between plays, holds for a pause, stops for a timeout and ends the quarter by itself. `tests/e2e/m3-local.spec.ts`: counts down on screen |
 | Play clock | 10, 15, 25 | room: the time the server reports. `tests/room/match.test.ts`: expiry snaps the play |
 | Two-minute warning | on, off | rules |
 | Timeouts per half | auto, 0-3 | rules |

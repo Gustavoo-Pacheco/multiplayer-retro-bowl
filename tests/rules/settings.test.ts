@@ -1,10 +1,10 @@
 // One test per match setting, showing that it changes what it says. Server timers are in tests/room/.
 import { describe, expect, it } from 'vitest';
-import { CONFIG_OPTIONS, DEFAULT_CONFIG, DIFFICULTY, PRESETS, type MatchConfig } from '../../src/shared/data/config';
+import { CONFIG_OPTIONS, DEFAULT_CONFIG, DIFFICULTY, PRESETS, realMinutes, type MatchConfig } from '../../src/shared/data/config';
 import { adjustScore, buildRoster } from '../../src/shared/data/roster';
 import { TEAM_BY_ID, TEAMS } from '../../src/shared/data/teams';
 import { quarterSeconds, runoffSeconds, timeoutsPerHalf, twoMinuteMark } from '../../src/shared/rules/clock';
-import { afterCoinToss, applyChoice, applyResult, applySnap, applyTimeout, createMatch, effectiveRoster, isChoiceLegal, simContext, type MatchState } from '../../src/shared/rules/match';
+import { afterCoinToss, applyChoice, applyResult, applySnap, applyTimeout, clockRunningNow, createMatch, effectiveRoster, expireClock, isChoiceLegal, isResultValid, runClock, simContext, type MatchState } from '../../src/shared/rules/match';
 import { acceptHandoff, fumbleChance, requestHandoff } from '../../src/shared/sim/contact';
 import { catchChance } from '../../src/shared/sim/pass';
 import { aimFadeAlpha, launch } from '../../src/shared/sim/pass';
@@ -45,6 +45,63 @@ describe('time settings', () => {
     };
     expect(run(true).banner?.kind).toBe('twoMin');
     expect(run(false).banner?.kind).not.toBe('twoMin');
+  });
+
+  it('game clock: Runs keeps going after an incomplete pass, and counts real time instead of the runoff', () => {
+    const after = (clock: MatchConfig['clock'], end: 'incomplete' | 'tackle') => {
+      const m = inPlay({ clock });
+      return applyResult(applySnap(m), result(m, end, 55, { clock: m.clock - 5 }));
+    };
+    expect(after('stops', 'incomplete').runoffPending).toBe(false);
+    const stopsTackle = after('stops', 'tackle');
+    expect(applySnap(stopsTackle).clock).toBe(stopsTackle.clock - runoffSeconds(stopsTackle));
+
+    const runs = after('runs', 'incomplete');
+    expect(clockRunningNow(runs)).toBe(true);
+    const later = runClock(runs, 9);
+    expect(later.clock).toBeCloseTo(runs.clock - 9);
+    expect(later.stats[later.possession].top).toBeCloseTo(runs.stats[runs.possession].top + 9);
+    // The room has already counted the time, so the snap takes nothing more.
+    expect(applySnap(later).clock).toBeCloseTo(later.clock);
+    // A stopped clock ignores real time.
+    expect(runClock(after('stops', 'incomplete'), 9).clock).toBe(after('stops', 'incomplete').clock);
+    expect(CONFIG_OPTIONS.clock).toEqual(['stops', 'runs']);
+  });
+
+  it('game clock: a timeout stops a running clock until the snap', () => {
+    const m = inPlay({ clock: 'runs' });
+    const huddle = applyResult(applySnap(m), result(m, 'tackle', 55, { clock: m.clock - 5 }));
+    expect(huddle.phase).toBe('huddle');
+    const stopped = applyTimeout({ ...huddle, timeouts: [3, 3] }, 0);
+    expect(clockRunningNow(stopped)).toBe(false);
+    expect(runClock(stopped, 9).clock).toBe(stopped.clock);
+  });
+
+  it('game clock: a running clock that reaches 0:00 between plays ends the quarter, but a conversion is still played', () => {
+    const m = inPlay({ clock: 'runs', quarter: 1 });
+    const huddle = applyResult(applySnap(m), result(m, 'tackle', 55, { clock: 3 }));
+    const out = expireClock(runClock(huddle, 5));
+    expect([out.period, out.phase, out.banner?.kind, out.clock, out.play]).toEqual([2, 'banner', 'quarter', 60, null]);
+
+    const td = applyResult(applySnap(m), result(m, 'td', 112, { clock: 2 }));
+    expect(td.after.k).toBe('conversion');
+    const late = expireClock(runClock(td, 5));
+    expect([late.period, late.phase, late.clock, clockRunningNow(late)]).toEqual([1, td.phase, 0, false]);
+
+    // The halftime and the end of the game come the same way.
+    expect(expireClock(runClock({ ...huddle, period: 2 }, 5)).banner?.kind).toBe('half');
+    expect(expireClock(runClock({ ...huddle, period: 4, score: [7, 0] }, 5)).phase).toBe('final');
+    // A stopped clock never runs out this way.
+    expect(expireClock({ ...huddle, config: { ...huddle.config, clock: 'stops' }, clock: 0 }).period).toBe(1);
+  });
+
+  it('game clock: a running clock lets the result read up to the slack above the room, and never winds back up', () => {
+    const m = applySnap(inPlay({ clock: 'runs' }));
+    expect(isResultValid(m, result(m, 'tackle', 55, { clock: m.clock + T.clock.snapSlack - 0.1 }))).toBe(true);
+    expect(isResultValid(m, result(m, 'tackle', 55, { clock: m.clock + T.clock.snapSlack + 0.1 }))).toBe(false);
+    expect(applyResult(m, result(m, 'tackle', 55, { clock: m.clock + 0.5 })).clock).toBe(m.clock);
+    const stops = applySnap(inPlay());
+    expect(isResultValid(stops, result(stops, 'tackle', 55, { clock: stops.clock + 0.5 }))).toBe(false);
   });
 
   it('pauses per player set their pools', () => {
@@ -244,11 +301,17 @@ describe('teams and conditions settings', () => {
 });
 
 describe('presets and data', () => {
-  it('presets match the plan', () => {
+  it('presets match the plan, plus Sprint, and each one sets the same keys', () => {
     expect(PRESETS.quick.quarter).toBe(1);
     expect(PRESETS.standard.quarter).toBe(3);
-    expect(PRESETS.long).toEqual({ quarter: 5, difficulty: 'hard' });
-    expect(DEFAULT_CONFIG.quarter).toBe(3);
+    expect(PRESETS.long).toMatchObject({ quarter: 5, difficulty: 'hard', clock: 'stops' });
+    expect(PRESETS.sprint).toEqual({ quarter: 1, clock: 'runs', twoMinute: false, overtime: 'sudden', difficulty: 'normal' });
+    const keys = Object.keys(PRESETS.sprint).sort();
+    for (const p of Object.values(PRESETS)) expect(Object.keys(p).sort()).toEqual(keys);
+    // Standard is the default for every key it sets.
+    for (const [k, v] of Object.entries(PRESETS.standard)) expect(DEFAULT_CONFIG[k as keyof MatchConfig]).toBe(v);
+    expect(realMinutes({ ...DEFAULT_CONFIG, ...PRESETS.sprint })).toBe(6);
+    expect(realMinutes({ ...DEFAULT_CONFIG, ...PRESETS.quick })).toBe(8);
   });
 
   it('every default is one of its own options', () => {

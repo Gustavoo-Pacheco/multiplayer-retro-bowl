@@ -19,7 +19,7 @@ Open the address it prints, then open the invite link in a second window to play
 | --- | --- |
 | `/` | Title screen: create a game, or join with a code |
 | `/r/K7P2QX` | Joins that room |
-| `/?local=1&q=3&a=SEA&b=LAR` | One match on one device, taking turns. Add `&weather=snow` or `&replays=big` to change those settings |
+| `/?local=1&q=3&a=SEA&b=LAR` | One match on one device, taking turns. Add `&weather=snow`, `&replays=big` or `&clock=runs` to change those settings |
 | `/?practice=1` | Repeated pass plays against each defensive call, with no rules or clock. `&play=N&defense=N` pins the calls by their place in the playbook, such as `&play=0` for HB Dive |
 | `/dev/sprites` | Every sprite in every team's colours |
 

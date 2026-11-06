@@ -9,7 +9,7 @@ export function startLocal(parent: HTMLElement): void {
   const q = new URLSearchParams(location.search);
   const a = q.get('a') ?? 'SEA';
   const b = q.get('b') ?? 'LAR';
-  const cfg: Partial<MatchConfig> = { quarter: Number(q.get('q') ?? 1) as MatchConfig['quarter'], replays: (q.get('replays') ?? 'off') as MatchConfig['replays'], weather: (q.get('weather') ?? 'clear') as MatchConfig['weather'] };
+  const cfg: Partial<MatchConfig> = { quarter: Number(q.get('q') ?? 1) as MatchConfig['quarter'], replays: (q.get('replays') ?? 'off') as MatchConfig['replays'], weather: (q.get('weather') ?? 'clear') as MatchConfig['weather'], clock: (q.get('clock') ?? 'stops') as MatchConfig['clock'] };
   let session: Session | null = null;
   const net = new LocalNet({
     onOpen: () => {},

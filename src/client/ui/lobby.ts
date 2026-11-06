@@ -1,6 +1,6 @@
 // The lobby: two team cards facing off, the wall of crests and the match settings tab.
 import { CREST_H, CREST_W, crestURL, starRating, starsURL } from '../art/crests';
-import { CONFIG_OPTIONS, PRESETS, REAL_MINUTES, type MatchConfig } from '../../shared/data/config';
+import { CONFIG_OPTIONS, PRESETS, realMinutes, type MatchConfig } from '../../shared/data/config';
 import { adjustScore } from '../../shared/data/roster';
 import { DIVISIONS, TEAMS, TEAM_BY_ID, type Team } from '../../shared/data/teams';
 import type { RoomView, Seat } from '../../shared/protocol';
@@ -24,6 +24,7 @@ interface Group { title: string; items: Item[] }
 const ON_OFF = { true: 'On', false: 'Off' };
 const TIME: Group = { title: 'TIME AND CALLS', items: [
   { key: 'quarter', label: 'Quarter length', unit: 'min' },
+  { key: 'clock', label: 'Game clock', names: { stops: 'Stops', runs: 'Runs' } },
   { key: 'playClock', label: 'Play clock', unit: 'sec' },
   { key: 'twoMinute', label: 'Two-minute warning', names: ON_OFF },
   { key: 'timeouts', label: 'Timeouts per half', names: { auto: 'Auto' } },
@@ -33,6 +34,7 @@ const TIME: Group = { title: 'TIME AND CALLS', items: [
 ] };
 const RULES: Group = { title: 'RULES', items: [
   { key: 'difficulty', label: 'Difficulty', names: { easy: 'Easy', normal: 'Normal', hard: 'Hard', extreme: 'Extreme' } },
+  { key: 'aimCursor', label: 'Aim cursor', names: { fades: 'Fades', full: 'Always full' } },
   { key: 'overtime', label: 'Overtime', names: { standard: 'Standard', sudden: 'Sudden', off: 'Off' } },
   { key: 'returns', label: 'Kick returns', names: { live: 'Live', touchback: 'Touchback only' } },
   { key: 'onside', label: 'Onside kicks', names: ON_OFF },
@@ -47,10 +49,9 @@ const RULES: Group = { title: 'RULES', items: [
 const CONDITIONS: Group = { title: 'TEAMS AND CONDITIONS', items: [
   { key: 'ratings', label: 'Team ratings', names: { real: 'Real', compressed: 'Compressed', equal: 'Equal' } },
   { key: 'weather', label: 'Weather', names: { clear: 'Clear', rain: 'Rain', snow: 'Snow', wind: 'Wind', random: 'Random' } },
-  { key: 'aimCursor', label: 'Aim cursor', names: { fades: 'Fades', full: 'Always full' } },
   { key: 'replays', label: 'Replays', names: { off: 'Off', big: 'Big plays', all: 'All scores' } },
 ] };
-/** Eleven rows a side, so both columns end level. */
+/** Eleven rows under two headings on the left and twelve under one on the right, so both columns end level. */
 const COLUMNS: Group[][] = [[TIME, CONDITIONS], [RULES]];
 
 const BAR_CELLS = 10;
@@ -229,7 +230,7 @@ export class Lobby {
       this.tabs.append(h('span', { class: 'dim' }, 'Sort by'), h('div', { class: 'seg' }, sortBtn('division', 'Division'), sortBtn('off', 'OFF'), sortBtn('def', 'DEF')));
     } else {
       const c = this.room?.config;
-      if (c) this.tabs.append(h('span', { class: 'dim', testid: 'estimate' }, `About ${REAL_MINUTES[c.quarter]} min a game`));
+      if (c) this.tabs.append(h('span', { class: 'dim', testid: 'estimate' }, `About ${realMinutes(c)} min a game`));
     }
   }
 
@@ -296,7 +297,7 @@ export class Lobby {
     const host = seat === 0;
     const c = room.config;
     const presets = h('div', { class: 'seg' });
-    for (const [id, label] of [['quick', 'Quick'], ['standard', 'Standard'], ['long', 'Long']] as const) {
+    for (const [id, label] of [['sprint', 'Sprint'], ['quick', 'Quick'], ['standard', 'Standard'], ['long', 'Long']] as const) {
       const p = PRESETS[id];
       const on = Object.entries(p).every(([k, v]) => c[k as keyof MatchConfig] === v);
       presets.append(h('button', { class: `opt${on ? ' on' : ''}`, testid: `preset-${id}`, 'aria-pressed': String(on), disabled: !host, onclick: () => this.a.setConfig(p) }, label));

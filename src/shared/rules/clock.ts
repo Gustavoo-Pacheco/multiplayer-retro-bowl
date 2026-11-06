@@ -1,10 +1,14 @@
 // The clock model: real seconds in live play, fixed runoff between plays.
+// With a running clock, the room counts real seconds between plays instead of the runoff.
 import { T } from '../sim/tuning';
 import type { MatchState } from './match';
 
 export function quarterSeconds(m: MatchState): number { return m.config.quarter * 60; }
 export function runoffSeconds(m: MatchState): number { return T.clock.runoff[m.config.quarter] ?? 12; }
 export function twoMinuteMark(m: MatchState): number { return T.clock.twoMinute[m.config.quarter] ?? 120; }
+
+/** The running-clock setting. Between plays, runoffPending then means the clock is running right now. */
+export function clockRuns(m: MatchState): boolean { return m.config.clock === 'runs'; }
 
 export function timeoutsPerHalf(m: MatchState): number {
   const c = m.config.timeouts;
@@ -15,6 +19,8 @@ export function timeoutsPerHalf(m: MatchState): number {
 export function settleRunoff(m: MatchState, clockRunning: boolean): void {
   m.runoffPending = false;
   if (!clockRunning || m.clock <= 0) return;
+  // A running clock keeps going after every play, and the room ends the quarter when it reaches 0:00.
+  if (clockRuns(m)) { m.runoffPending = true; return; }
   const run = runoffSeconds(m);
   if (m.clock - run <= 0) { m.clock = 0; return; }
   m.runoffPending = true;

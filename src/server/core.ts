@@ -4,9 +4,10 @@ import { DEFAULT_CONFIG, isValidConfigPatch, type MatchConfig } from '../shared/
 import { TEAM_BY_ID } from '../shared/data/teams';
 import type { ClientMsg, ErrorCode, RoomView, Seat, ServerMsg } from '../shared/protocol';
 import {
-  advanceBanner, afterCoinToss, applyCall, applyChoice, applyResult, applySnap, applyTimeout, canCall, canTimeout, concede, createMatch, currentController,
-  defaultChoice, huddleTimeout, isChoiceLegal, isResultValid, nextController, presentResult, viewFor, voidPlay, type MatchState,
+  advanceBanner, afterCoinToss, applyCall, applyChoice, applyResult, applySnap, applyTimeout, canCall, canTimeout, clockRunningNow, concede, createMatch, currentController,
+  defaultChoice, expireClock, huddleTimeout, isChoiceLegal, isResultValid, nextController, presentResult, runClock, viewFor, voidPlay, type MatchState,
 } from '../shared/rules/match';
+import { clockRuns } from '../shared/rules/clock';
 import { emptyStats, type PlayEnd, type PlayResult } from '../shared/sim/state';
 import { T } from '../shared/sim/tuning';
 
@@ -57,6 +58,8 @@ export interface RoomData {
   waiting: boolean;
   canClaim: Seat | null;
   lastActivity: number;
+  /** While a running clock runs between plays: when it was last brought up to date. Missing in rooms saved before the setting. */
+  clockFrom?: number | null;
 }
 
 const SEATS: Seat[] = [0, 1];
@@ -98,6 +101,7 @@ export class RoomCore {
   private persist(): void {
     const d = this.data;
     if (!d) return;
+    this.armClock();
     d.lastActivity = this.host.now();
     this.host.save(JSON.stringify(d));
     this.updateAlarm();
@@ -106,14 +110,49 @@ export class RoomCore {
   private updateAlarm(): void {
     const d = this.data;
     if (!d) return;
-    const times = [d.dl.playClock, d.dl.banner, d.dl.pause, d.dl.reconnect[0], d.dl.reconnect[1], d.dl.watchdog, d.lastActivity + T.timers.cleanup]
+    const times = [d.dl.playClock, d.dl.banner, d.dl.pause, d.dl.reconnect[0], d.dl.reconnect[1], d.dl.watchdog, this.clockZeroAt(), d.lastActivity + T.timers.cleanup]
       .filter((x): x is number => x !== null);
     this.host.setAlarm(Math.min(...times));
+  }
+
+  // --- Running clock ---------------------------------------------------------
+
+  /** When a running clock will reach 0:00, if it is running. */
+  private clockZeroAt(): number | null {
+    const d = this.data!;
+    return d.clockFrom == null || !d.match ? null : d.clockFrom + d.match.clock * 1000;
+  }
+
+  /** Brings a running clock up to now. Runs first on every way into the room, before anything reads the clock. */
+  private tickClock(): void {
+    const d = this.data;
+    if (!d?.match || d.clockFrom == null) return;
+    const now = this.host.now();
+    d.match = runClock(d.match, (now - d.clockFrom) / 1000);
+    d.clockFrom = now;
+  }
+
+  /** Starts or stops a running clock to suit the state. Pauses and reconnect waits stop it. */
+  private armClock(): void {
+    const d = this.data!;
+    const on = d.screen === 'match' && !!d.match && !d.live && d.pausedBy === null && !d.waiting && clockRunningNow(d.match);
+    d.clockFrom = on ? (d.clockFrom ?? this.host.now()) : null;
+  }
+
+  private clockExpired(): void {
+    const d = this.data!;
+    const before = d.match!;
+    d.clockFrom = null;
+    d.match = expireClock(before);
+    // A conversion still to play keeps its phase and timer. Otherwise the quarter is over.
+    if (d.match.period !== before.period || d.match.phase === 'final') this.enterState();
+    else { this.sendMatch(); this.persist(); }
   }
 
   onAlarm(): void {
     const d = this.data;
     if (!d) return;
+    this.tickClock();
     const now = this.host.now();
     if (d.dl.watchdog !== null && now >= d.dl.watchdog) {
       if (d.live && now - this.lastFrameAt >= T.timers.watchdog) this.voidOrSettle();
@@ -122,6 +161,7 @@ export class RoomCore {
     if (d.dl.reconnect[0] !== null && now >= d.dl.reconnect[0]) this.reconnectExpired(0);
     if (d.dl.reconnect[1] !== null && now >= d.dl.reconnect[1]) this.reconnectExpired(1);
     if (d.dl.pause !== null && now >= d.dl.pause) this.resume();
+    if (d.clockFrom != null && d.match && d.match.clock <= 0) this.clockExpired();
     if (d.dl.playClock !== null && now >= d.dl.playClock) this.playClockExpired();
     if (d.dl.banner !== null && now >= d.dl.banner) this.bannerDone();
     if (this.data && now - this.data.lastActivity >= T.timers.cleanup) {
@@ -266,9 +306,16 @@ export class RoomCore {
     this.persist();
   }
 
-  private beginLive(auto: boolean, sender: Seat | null): void {
+  private beginLive(auto: boolean, sender: Seat | null, senderClock?: number): void {
     const d = this.data!;
-    const pre = d.match!;
+    let pre = d.match!;
+    // A running clock: the controller's screen counted it down too, and starts the play from its own reading.
+    // It can be a moment behind the room's, so it is allowed up to the slack above.
+    if (clockRuns(pre) && typeof senderClock === 'number' && Number.isFinite(senderClock)) {
+      const clock = Math.max(0, Math.min(senderClock, pre.clock + T.clock.snapSlack));
+      pre = { ...pre, clock, play: pre.play ? { ...pre.play, clock } : pre.play };
+    }
+    d.clockFrom = null;
     d.snapshot = pre;
     const m = applySnap(pre);
     d.match = m;
@@ -353,6 +400,7 @@ export class RoomCore {
   onMessage(conn: Conn, raw: string | ArrayBuffer): void {
     if (!this.withinRate(conn)) { this.err(conn, 'rate'); return; }
     if (typeof raw !== 'string') { this.relayFrame(conn, raw); return; }
+    this.tickClock();
     let m: ClientMsg;
     try { m = JSON.parse(raw) as ClientMsg; } catch { this.err(conn, 'badmsg'); return; }
     if (m.t === 'join') { this.join(conn, m); return; }
@@ -404,7 +452,7 @@ export class RoomCore {
     switch (m.t) {
       case 'snap':
         if (match.phase !== 'presnap' || match.play?.id !== m.playId) { this.err(conn, 'phase'); return; }
-        this.beginLive(false, seat);
+        this.beginLive(false, seat, m.clock);
         return;
       case 'timeout':
         if (!canTimeout(match, seat)) { this.err(conn, 'phase'); return; }
@@ -526,6 +574,7 @@ export class RoomCore {
     d.pausedBy = null;
     d.canClaim = null;
     d.dl = { playClock: null, banner: null, pause: null, reconnect: [null, null], watchdog: null };
+    d.clockFrom = null;
     this.sendRoom();
     this.enterState();
   }
@@ -616,6 +665,7 @@ export class RoomCore {
 
   onClose(conn: Conn): void {
     if (!this.data || conn.seat === null) return;
+    this.tickClock();
     const seat = conn.seat;
     conn.seat = null;
     if (this.host.conns().some((c) => c !== conn && c.seat === seat)) return;

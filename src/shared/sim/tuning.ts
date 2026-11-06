@@ -124,6 +124,8 @@ export const T = {
     twoMinute: { 1: 30, 2: 60, 3: 120, 5: 120 } as Record<number, number>,
     autoTimeouts: { 1: 2, 2: 2, 3: 3, 5: 3 } as Record<number, number>,
     otTimeouts: 2,
+    /** Running clock: how far, in seconds, the controller's reading at the snap or the play's end may be above the room's. */
+    snapSlack: 1,
   },
 
   rules: { touchback: 25, xpLosYards: 16, twoPointSpot: 2, firstDownYards: 10 },

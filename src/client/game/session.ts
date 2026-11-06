@@ -4,7 +4,7 @@ import { DEF_CALLS, PLAYBOOK, isRunKind } from '../../shared/data/playbook';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { botChoice } from '../../shared/rules/coach';
 import { botCall } from '../../shared/rules/playcall';
-import { applySnap, callerOf, effectiveRoster, nextController, simContext, type CallSide, type MatchState } from '../../shared/rules/match';
+import { applySnap, callerOf, clockRunningNow, effectiveRoster, nextController, simContext, type CallSide, type MatchState } from '../../shared/rules/match';
 import { hashStr } from '../../shared/sim/rng';
 import { botInputs, newBot, type BotState } from '../../shared/sim/bot';
 import { acceptHandoff, continueWithAutoRunner } from '../../shared/sim/contact';
@@ -108,6 +108,8 @@ export class Session {
   private raf = 0;
   private botChoiceAt = 0;
   private live = false;
+  /** The room's last reading of the game clock, for counting a running clock down between plays. */
+  private clockSync = { at: 0, value: 0 };
   private shadow: SimState | null = null;
   private wakeLock: WakeLockSentinel | null = null;
   private devPanel: DevPanel | null = null;
@@ -276,6 +278,7 @@ export class Session {
   private setMatch(m: MatchState): void {
     const prev = this.match;
     this.match = m;
+    this.clockSync = { at: performance.now(), value: m.clock };
     if (!prev) ATLAS.prepare(kitsFor(m));
     this.pres.onMatch(prev, m, this.opts.local ? null : this.seat, this.info, this.frame);
     if (m.phase === 'final') { this.sim = null; this.opts.onFinal(m); }
@@ -427,7 +430,19 @@ export class Session {
     };
   }
 
+  /** A running clock counts down on screen between plays, from the room's last reading. Pauses and reconnect waits hold it. */
+  private tickDeadClock(now: number): void {
+    const m = this.match;
+    if (!m) return;
+    if (!this.live && !this.paused && !this.waiting && clockRunningNow(m)) {
+      m.clock = Math.max(0, this.clockSync.value - (now - this.clockSync.at) / 1000);
+      // The kick meter shows the play's own clock until the kick goes.
+      if (this.sim && !this.sentSnap) this.sim.clock = m.clock;
+    } else this.clockSync = { at: now, value: m.clock };
+  }
+
   private tick(now: number, dtMs: number): void {
+    this.tickDeadClock(now);
     this.syncGestures();
     this.gestures.tick(now);
     this.botDecisions(now);
@@ -485,7 +500,7 @@ export class Session {
       this.playClockEnd = null;
       // Same pure step the server runs, so both agree on any clock runoff.
       if (this.match?.phase === 'presnap') { this.match = applySnap(this.match); s.clock = this.match.clock; }
-      this.net.send({ t: 'snap', playId: s.desc.id });
+      this.net.send({ t: 'snap', playId: s.desc.id, clock: s.clock });
     }
     if (s.ev) { frameFromSim(s, this.frame); this.pres.onEvents(s.ev, this.frame); }
     if (s.phase === 'kickPower') { frameFromSim(s, this.frame); this.pres.meterTick(this.frame); }

@@ -29,7 +29,8 @@ export type ClientMsg =
   | { t: 'pickTeam'; team: string }
   | { t: 'ready'; ready: boolean }
   | { t: 'rematch' }
-  | { t: 'snap'; playId: number }
+  /** clock: the controller's own reading of a running clock at the snap. */
+  | { t: 'snap'; playId: number; clock?: number }
   /** A play call in the huddle: the offense's play or the defense's call, as an index into its book. */
   | { t: 'call'; playId: number; side: CallSide; id: number }
   | { t: 'timeout' }

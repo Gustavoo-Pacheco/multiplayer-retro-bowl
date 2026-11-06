@@ -1,6 +1,8 @@
 // Match settings, their defaults, and presets.
 export interface MatchConfig {
   quarter: 1 | 2 | 3 | 5;
+  /** Stops: the clock stops between plays as usual. Runs: it keeps running in real time between plays, stopping only for timeouts, pauses, the two-minute warning and quarter breaks. */
+  clock: 'stops' | 'runs';
   playClock: 10 | 15 | 25;
   twoMinute: boolean;
   timeouts: 'auto' | 0 | 1 | 2 | 3;
@@ -29,19 +31,29 @@ export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme';
 export type Weather = 'clear' | 'rain' | 'snow' | 'wind';
 
 export const DEFAULT_CONFIG: MatchConfig = {
-  quarter: 3, playClock: 15, twoMinute: true, timeouts: 'auto', defense: 'players', pauses: 2, reconnect: 2,
+  quarter: 3, clock: 'stops', playClock: 15, twoMinute: true, timeouts: 'auto', defense: 'players', pauses: 2, reconnect: 2,
   difficulty: 'normal', overtime: 'standard', returns: 'live', onside: true, twoPoint: true, penalties: true,
   fumbles: 'normal', bullet: true, trucking: true, fatigue: true, injuries: false,
   ratings: 'real', weather: 'clear', aimCursor: 'fades', replays: 'big',
 };
 
-export const PRESETS: Record<'quick' | 'standard' | 'long', Partial<MatchConfig>> = {
-  quick: { quarter: 1, difficulty: 'normal' },
-  standard: { quarter: 3, difficulty: 'normal' },
-  long: { quarter: 5, difficulty: 'hard' },
+export type PresetId = 'sprint' | 'quick' | 'standard' | 'long';
+
+/** Every preset sets the same keys, so picking one fully replaces another. */
+export const PRESETS: Record<PresetId, Partial<MatchConfig>> = {
+  sprint: { quarter: 1, clock: 'runs', twoMinute: false, overtime: 'sudden', difficulty: 'normal' },
+  quick: { quarter: 1, clock: 'stops', twoMinute: true, overtime: 'standard', difficulty: 'normal' },
+  standard: { quarter: 3, clock: 'stops', twoMinute: true, overtime: 'standard', difficulty: 'normal' },
+  long: { quarter: 5, clock: 'stops', twoMinute: true, overtime: 'standard', difficulty: 'hard' },
 };
 
 export const REAL_MINUTES: Record<number, number> = { 1: 8, 2: 12, 3: 15, 5: 19 };
+/** With a running clock. Estimated from bot games through the real rules and the room's timers, allowing about 4 s to call a play and 2.5 s at the line. */
+export const REAL_MINUTES_RUNNING: Record<number, number> = { 1: 6, 2: 11, 3: 16, 5: 25 };
+
+export function realMinutes(c: MatchConfig): number {
+  return (c.clock === 'runs' ? REAL_MINUTES_RUNNING : REAL_MINUTES)[c.quarter] ?? 15;
+}
 
 export const DIFFICULTY: Record<Difficulty, { sackTime: number; coverLag: number; intRadius: number; aimFade: number }> = {
   easy: { sackTime: 4.0, coverLag: 0.45, intRadius: 0.8, aimFade: 0 },
@@ -53,6 +65,7 @@ export const DIFFICULTY: Record<Difficulty, { sackTime: number; coverLag: number
 /** The legal value list for each setting, used to validate setConfig and to draw the settings tab. */
 export const CONFIG_OPTIONS: { [K in keyof MatchConfig]: readonly MatchConfig[K][] } = {
   quarter: [1, 2, 3, 5],
+  clock: ['stops', 'runs'],
   playClock: [10, 15, 25],
   twoMinute: [true, false],
   timeouts: ['auto', 0, 1, 2, 3],

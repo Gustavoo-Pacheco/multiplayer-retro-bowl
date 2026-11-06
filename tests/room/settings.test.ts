@@ -41,6 +41,38 @@ describe('settings the server enforces', () => {
     await off.wait('paused', (m) => m.by === def.seat);
   });
 
+  it('game clock: Runs counts down between plays, holds for a pause, stops for a timeout, and ends the quarter at 0:00', async () => {
+    const { off, def, match: m0 } = await start({ clock: 'runs' });
+    expect(m0.runoffPending).toBe(true);
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    // A pause holds it.
+    off.send({ t: 'pause' });
+    const atPause = await waitState(def, (m) => m.phase === 'presnap');
+    await sleep(1000);
+    clearInbox(off, def);
+    off.send({ t: 'pause' });
+    const resumed = await waitState(def, (m) => m.phase === 'presnap');
+    expect(atPause.clock - resumed.clock).toBeLessThan(0.3);
+
+    // Then it runs in real time, until a timeout stops it.
+    await sleep(1200);
+    clearInbox(off, def);
+    off.send({ t: 'timeout' });
+    const timedOut = await waitState(def, (m) => m.phase === 'huddle' && m.timeouts[off.seat!] < resumed.timeouts[off.seat!]);
+    expect(resumed.clock - timedOut.clock).toBeGreaterThan(1);
+    expect(resumed.clock - timedOut.clock).toBeLessThan(2.5);
+    expect(timedOut.runoffPending).toBe(false);
+    await sleep(600);
+    const huddleBroke = await waitState(def, (m) => m.phase === 'presnap');
+    expect(huddleBroke.clock).toBe(timedOut.clock);
+
+    // Nobody snaps: at 0:00 the room ends the quarter by itself.
+    off.send({ t: 'dev', op: 'patch', patch: { clock: 1, runoffPending: true } });
+    const ended = await waitState(def, (m) => m.period === 2, 5000);
+    expect([ended.phase, ended.banner?.kind]).toEqual(['banner', 'quarter']);
+  });
+
   it('no pauses at all when the setting is 0', async () => {
     const { off, def } = await start({ pauses: 0 });
     clearInbox(def);

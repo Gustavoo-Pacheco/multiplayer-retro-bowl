@@ -49,3 +49,30 @@ test('a person can kick by keyboard, choose on 4th down by button and key, and a
   await page.keyboard.press('Space');
   await page.waitForFunction(() => (window as any).__borg.match.phase === 'live');
 });
+
+test('a running clock counts down between plays on one device, and plays still go through', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?local=1&bot=1&q=1&clock=runs&speed=6&dev=1');
+  await page.waitForFunction(() => !!(window as any).__borg?.match, undefined, { timeout: 15000 });
+  type S = { phase: string; clock: number; period: number; run: boolean; id: number };
+  const read = () => page.evaluate((): S => { const m = (window as any).__borg.match; return { phase: m.phase, clock: m.clock, period: m.period, run: m.runoffPending, id: m.playId }; });
+  let last = await read();
+  let ticks = 0;
+  let wentUp = 0;
+  const until = Date.now() + 120000;
+  while (last.period < 2 && Date.now() < until) {
+    await page.waitForTimeout(200);
+    const s = await read();
+    // The same dead ball, with the clock running: it moves on its own, and never back up.
+    if (s.run && last.run && s.id === last.id && s.phase === last.phase && s.period === last.period && ['huddle', 'presnap', 'choice4th'].includes(s.phase)) {
+      if (s.clock < last.clock) ticks += 1;
+      if (s.clock > last.clock + 0.05) wentUp += 1;
+    }
+    last = s;
+  }
+  expect(last.period).toBeGreaterThanOrEqual(2);
+  expect(ticks).toBeGreaterThan(5);
+  expect(wentUp).toBe(0);
+  expect(errors).toEqual([]);
+});
