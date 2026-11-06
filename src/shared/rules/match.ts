@@ -1,17 +1,32 @@
 // The match rules as pure functions: (match, event) -> match.
 import { DIFFICULTY, type MatchConfig, type Weather } from '../data/config';
-import { pickPlay } from '../data/playbook';
+import { DEF_CALLS, PLAYBOOK } from '../data/playbook';
 import { adjustScore, buildRoster, kickRange, KICKER_SLOT, type RosterPlayer } from '../data/roster';
 import { TEAM_BY_ID } from '../data/teams';
 import { mixSeed } from '../sim/rng';
 import { isKickType, type PlayDesc, type PlayResult, type PlayStats, type PlayType, type Seat, type SimCfg, type SimTeams } from '../sim/state';
 import { T } from '../sim/tuning';
-import { checkTwoMinute, quarterSeconds, runoffSeconds, settleRunoff, timeoutsPerHalf } from './clock';
+import { checkTwoMinute, quarterSeconds, runoffSeconds, settleRunoff, timeoutsPerHalf, twoMinuteMark } from './clock';
 import { advanceDowns, clampSpot, setFirstDown, setTouchback, xFromOwn, yardsToGoal } from './downs';
+import { coachDefense, coachOffense, type Situation } from './playcall';
 import { otOnDriveEnd, type OtState } from './overtime';
 import { addPoints, POINTS, scoreFieldGoal, scoreSafety, scoreTouchdown } from './scoring';
 
-export type MatchPhase = 'coinToss' | 'kickChoice' | 'presnap' | 'choice4th' | 'conversion' | 'live' | 'banner' | 'replay' | 'final';
+export type MatchPhase = 'coinToss' | 'kickChoice' | 'huddle' | 'presnap' | 'choice4th' | 'conversion' | 'live' | 'banner' | 'replay' | 'final';
+
+/** Which side of a play call: the offense's play or the defense's call. */
+export type CallSide = 'off' | 'def';
+
+/**
+ * The huddle before a play from scrimmage. Index 0 is the offense, 1 the defense. A call of -1 is not made
+ * yet; the room hides the other side's call until both are in, so a browser may also see -2 for "made".
+ */
+export interface Huddle {
+  suggest: [number, number];
+  calls: [number, number];
+  /** The computer calls the defense. */
+  computer: boolean;
+}
 
 export interface TeamStats extends PlayStats { top: number }
 
@@ -27,6 +42,8 @@ export interface LastPlay {
   end: PlayResult['end']; type: PlayType; yards: number; possessor: Seat; offense: Seat; sack: boolean; big: boolean; turnover: boolean;
   firstDown: boolean; note: string; scored: number; turnoverOnDowns: boolean; safety: boolean; touchback: boolean;
   playId: number; injury: [Seat, number] | null;
+  /** The offense's play and the defense's call, for plays from scrimmage. */
+  call: [number, number] | null;
 }
 
 export interface MatchState {
@@ -55,8 +72,10 @@ export interface MatchState {
   score: [number, number];
   scoreByPeriod: [number[], number[]];
   timeouts: [number, number];
-  audibles: [number, number];
   pauses: [number, number];
+  huddle: Huddle | null;
+  /** Each team's recent plays on offense, oldest first, which the coach reads for tendencies. */
+  recent: [number[], number[]];
   coinWinner: Seat;
   openingKicker: Seat;
   ot: OtState | null;
@@ -108,7 +127,7 @@ export function createMatch(config: MatchConfig, teams: [string, string], seed: 
     possession: other(coinWinner), attack: [1, -1], ballX: 60, down: 1, toGo: 10, chosen4th: false,
     playId: 0, play: null, kicker: other(coinWinner), kickKind: 'kickoff',
     score: [0, 0], scoreByPeriod: [[0, 0, 0, 0], [0, 0, 0, 0]],
-    timeouts: [0, 0], audibles: [config.audibles, config.audibles], pauses: [config.pauses, config.pauses],
+    timeouts: [0, 0], pauses: [config.pauses, config.pauses], huddle: null, recent: [[], []],
     coinWinner, openingKicker: other(coinWinner), ot: null, winner: null, banner: null, resume: null, after: { k: 'scrimmage' },
     condition: [new Array<number>(17).fill(1), new Array<number>(17).fill(1)],
     armFatigue: [0, 0], injured: [[], []], stats: [emptyTeamStats(), emptyTeamStats()], last: null, conceded: null,
@@ -149,18 +168,38 @@ export function simContext(m: MatchState): { teams: SimTeams; cfg: SimCfg } {
 
 function playSeed(m: MatchState): number { return mixSeed(m.seed, m.playId); }
 
-function makeDesc(m: MatchState, type: PlayType, offense: Seat, los: number, playbook = 0): PlayDesc {
+function makeDesc(m: MatchState, type: PlayType, offense: Seat, los: number, playbook = 0, defense = 0): PlayDesc {
   const scrimmage = type === 'scrimmage';
   const clock = scrimmage && m.runoffPending ? m.clock - runoffSeconds(m) : m.clock;
-  return { id: m.playId, type, seed: playSeed(m), offense, dir: m.attack[offense], los, down: m.down, toGo: m.toGo, playbook, clock };
+  return { id: m.playId, type, seed: playSeed(m), offense, dir: m.attack[offense], los, down: m.down, toGo: m.toGo, playbook, defense, clock };
 }
 
-function offerScrimmage(m: MatchState, exclude = -1): void {
+/** What the coach knows about the snap coming up. */
+export function situationOf(m: MatchState): Situation {
+  const off = m.play?.offense ?? m.possession;
+  const two = m.play?.type === 'twoPoint';
+  const toGoal = two ? T.rules.twoPointSpot : yardsToGoal(m.ballX, m.attack[off]);
+  const hurry = (m.period === 2 || m.period >= 4) && m.clock <= twoMinuteMark(m);
+  return {
+    down: two ? 1 : m.down, toGo: two ? T.rules.twoPointSpot : m.toGo, toGoal, clock: m.clock, period: m.period,
+    lead: m.score[off] - m.score[other(off)], hurry, twoPoint: two, recent: m.recent[off],
+  };
+}
+
+/** Opens the huddle for the play in m.play: both sides get the coach's pick, and the computer calls its defense at once. */
+function openHuddle(m: MatchState): void {
+  const sit = situationOf(m);
+  const seed = playSeed(m);
+  const suggest: [number, number] = [coachOffense(sit, mixSeed(seed, 5)), coachDefense(sit, mixSeed(seed, 6))];
+  const computer = m.config.defense === 'computer';
+  m.huddle = { suggest, calls: [-1, computer ? coachDefense(sit, mixSeed(seed, 7), 2.2) : -1], computer };
+  m.phase = 'huddle';
+}
+
+function offerScrimmage(m: MatchState): void {
   m.playId += 1;
-  const roll = (mixSeed(playSeed(m), 3) % 1000) / 1000;
-  const play = pickPlay(roll, m.down, m.toGo, exclude);
-  m.play = makeDesc(m, 'scrimmage', m.possession, m.ballX, play.id);
-  m.phase = 'presnap';
+  m.play = makeDesc(m, 'scrimmage', m.possession, m.ballX, -1, -1);
+  openHuddle(m);
 }
 
 function offerChoiceOrPlay(m: MatchState): void {
@@ -199,10 +238,8 @@ function startTwoPoint(m: MatchState): void {
   const dir = m.attack[m.possession];
   m.playId += 1;
   const los = dir > 0 ? 110 - T.rules.twoPointSpot : 10 + T.rules.twoPointSpot;
-  const roll = (mixSeed(playSeed(m), 3) % 1000) / 1000;
-  const play = pickPlay(roll, 1, T.rules.twoPointSpot);
-  m.play = { ...makeDesc(m, 'twoPoint', m.possession, los, play.id), down: 1, toGo: T.rules.twoPointSpot };
-  m.phase = 'presnap';
+  m.play = { ...makeDesc(m, 'twoPoint', m.possession, los, -1, -1), down: 1, toGo: T.rules.twoPointSpot };
+  openHuddle(m);
 }
 
 function gotoNext(m: MatchState): void {
@@ -288,34 +325,86 @@ export function defaultChoice(m: MatchState): Choice {
 export function canTimeout(m: MatchState, seat: Seat): boolean {
   if (m.possession !== seat || m.timeouts[seat] <= 0) return false;
   if (m.phase === 'choice4th') return true;
-  if (m.phase !== 'presnap' || !m.play) return false;
+  if ((m.phase !== 'presnap' && m.phase !== 'huddle') || !m.play) return false;
   return m.play.type === 'scrimmage' || m.play.type === 'punt' || m.play.type === 'fieldGoal';
 }
 
+/** A timeout stops the clock. On 4th down it reopens the choice; otherwise both sides go back to the huddle. */
 export function applyTimeout(prev: MatchState, seat: Seat): MatchState {
   const m = clone(prev);
   if (!canTimeout(m, seat)) return m;
   m.timeouts[seat] -= 1;
   m.runoffPending = false;
-  if (m.down === 4) { m.chosen4th = false; m.phase = 'choice4th'; m.play = null; }
-  else if (m.play) m.play.clock = m.clock;
+  if (m.down === 4) { m.chosen4th = false; m.phase = 'choice4th'; m.play = null; m.huddle = null; }
+  else if (m.play) {
+    m.play.clock = m.clock;
+    if (m.play.type === 'scrimmage') { m.play.playbook = -1; m.play.defense = -1; openHuddle(m); }
+  }
   return m;
 }
 
-export function canAudible(m: MatchState, seat: Seat): boolean {
-  return m.phase === 'presnap' && m.possession === seat && m.audibles[seat] > 0 && !!m.play && (m.play.type === 'scrimmage' || m.play.type === 'twoPoint');
+// --- Play calls --------------------------------------------------------------
+
+/** The seat that calls a side, or null if nobody may (the computer has the defense). */
+export function callerOf(m: MatchState, side: CallSide): Seat | null {
+  if (m.phase !== 'huddle' || !m.play || !m.huddle) return null;
+  if (side === 'off') return m.play.offense;
+  return m.huddle.computer ? null : other(m.play.offense);
 }
 
-export function applyAudible(prev: MatchState, seat: Seat): MatchState {
+export function canCall(m: MatchState, seat: Seat, side: CallSide, id: number): boolean {
+  const h = m.huddle;
+  if (!h || callerOf(m, side) !== seat) return false;
+  if (h.calls[side === 'off' ? 0 : 1] !== -1) return false;
+  return Number.isInteger(id) && id >= 0 && id < (side === 'off' ? PLAYBOOK.length : DEF_CALLS.length);
+}
+
+/** A side locks in its call. Once both are in, the teams break the huddle for the line. */
+export function applyCall(prev: MatchState, seat: Seat, side: CallSide, id: number): MatchState {
+  if (!canCall(prev, seat, side, id)) return prev;
   const m = clone(prev);
-  if (!canAudible(m, seat) || !m.play) return m;
-  m.audibles[seat] -= 1;
-  const old = m.play;
-  m.playId += 1;
-  const roll = (mixSeed(playSeed(m), 3) % 1000) / 1000;
-  const play = pickPlay(roll, old.down, old.toGo, old.playbook);
-  m.play = { ...old, id: m.playId, seed: playSeed(m), playbook: play.id };
+  m.huddle!.calls[side === 'off' ? 0 : 1] = id;
+  if (m.huddle!.calls[0] >= 0 && m.huddle!.calls[1] >= 0) breakHuddle(m);
   return m;
+}
+
+/** Time's up: anyone who hasn't called gets the coach's pick. */
+export function huddleTimeout(prev: MatchState): MatchState {
+  const m = clone(prev);
+  const h = m.huddle;
+  if (m.phase !== 'huddle' || !h) return m;
+  for (const i of [0, 1] as const) if (h.calls[i] < 0) h.calls[i] = h.suggest[i];
+  breakHuddle(m);
+  return m;
+}
+
+function breakHuddle(m: MatchState): void {
+  const h = m.huddle!;
+  const play = m.play!;
+  play.playbook = h.calls[0];
+  play.defense = h.calls[1];
+  const r = m.recent[play.offense];
+  r.push(h.calls[0]);
+  if (r.length > 8) r.shift();
+  m.huddle = null;
+  m.phase = 'presnap';
+}
+
+/**
+ * The copy of the match a seat may see. In the huddle the other side's call stays hidden (-2 means made), and so
+ * does the other side's suggestion. 'shared' is one screen for both players: both suggestions, neither call.
+ */
+export function viewFor(m: MatchState, seat: Seat | 'shared' | null): MatchState {
+  const h = m.huddle;
+  if (!h || !m.play) return m;
+  const mine: 0 | 1 | null = seat === null || seat === 'shared' ? null : seat === m.play.offense ? 0 : 1;
+  const calls: [number, number] = [
+    mine === 0 || h.calls[0] < 0 ? h.calls[0] : -2,
+    mine === 1 || h.calls[1] < 0 ? h.calls[1] : -2,
+  ];
+  const see = (i: 0 | 1) => seat === 'shared' || mine === i;
+  const suggest: [number, number] = [see(0) ? h.suggest[0] : -1, see(1) ? h.suggest[1] : -1];
+  return { ...m, huddle: { ...h, calls, suggest } };
 }
 
 export function advanceBanner(prev: MatchState): MatchState {
@@ -355,7 +444,7 @@ export function presentResult(next: MatchState, r: PlayResult): MatchState {
 /** Who has control once this break is over: the one player who may skip a replay. */
 export function nextController(m: MatchState): Seat {
   const phase = m.resume?.phase ?? m.phase;
-  if (phase === 'presnap' && m.play) return m.play.offense;
+  if ((phase === 'presnap' || phase === 'huddle') && m.play) return m.play.offense;
   if (phase === 'kickChoice') return m.kicker;
   if (phase === 'banner' && m.after.k === 'kick') return m.after.kicker;
   return m.possession;
@@ -502,7 +591,6 @@ function changeEnds(m: MatchState): void {
 
 function resetHalf(m: MatchState, timeouts: number): void {
   m.timeouts = [timeouts, timeouts];
-  m.audibles = [m.config.audibles, m.config.audibles];
 }
 
 function endPeriod(m: MatchState): void {
@@ -592,6 +680,7 @@ export function applyResult(prev: MatchState, r: PlayResult): MatchState {
     end: r.end, type: r.type, yards: r.yards, possessor: r.possessor, offense: r.offense, sack: r.sack, big: r.big, turnover,
     firstDown: f.firstDown, note: r.note ?? '', scored: f.scored, turnoverOnDowns: f.turnoverOnDowns, safety: f.safety, touchback: f.touchback,
     playId: r.playId, injury: r.injury ?? null,
+    call: m.play && (r.type === 'scrimmage' || r.type === 'twoPoint') ? [m.play.playbook, m.play.defense] : null,
   };
   // Overtime: the ball changed hands with no score.
   if (m.ot && m.winner === null && f.scored === 0 && m.possession !== prevPos && (r.type === 'scrimmage' || r.type === 'punt' || r.type === 'fieldGoal')) otOnDriveEnd(m);
@@ -623,7 +712,7 @@ export function voidPlay(snapshot: MatchState): MatchState {
 }
 
 export function currentController(m: MatchState): Seat | null {
-  if (m.phase === 'presnap' || m.phase === 'live') return m.play ? m.play.offense : null;
+  if (m.phase === 'presnap' || m.phase === 'live' || m.phase === 'huddle') return m.play ? m.play.offense : null;
   if (m.phase === 'choice4th' || m.phase === 'conversion') return m.possession;
   if (m.phase === 'kickChoice') return m.kicker;
   return null;

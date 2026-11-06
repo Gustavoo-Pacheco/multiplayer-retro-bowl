@@ -11,7 +11,7 @@ export function clockText(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function downText(m: MatchState): string {
+export function downText(m: MatchState): string {
   const n = ['', '1ST', '2ND', '3RD', '4TH'][m.down] ?? '';
   const dir = m.attack[m.possession];
   const toGoal = dir > 0 ? 110 - m.ballX : m.ballX - 10;
@@ -62,7 +62,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, m: MatchState, clock: num
   const y0 = 4;
   // The second row only appears when it has something to say, so banners and replays get a tidy block.
   let line = '';
-  if (m.phase === 'presnap' || m.phase === 'live' || m.phase === 'choice4th') {
+  if (m.phase === 'huddle' || m.phase === 'presnap' || m.phase === 'live' || m.phase === 'choice4th') {
     line = !m.play || m.play.type === 'scrimmage' || m.phase === 'choice4th' ? `${downText(m)}  ${spotText(m)}` : playTypeText(m);
   } else if (m.phase === 'conversion') line = 'CONVERSION';
   const second = !!line || playClock !== null;
@@ -86,7 +86,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, m: MatchState, clock: num
   drawText(ctx, q, mx + 4, y0 + 4, '#c0261c', 1);
   const ct = clockText(clock);
   drawText(ctx, ct, mx + midW - textWidth(ct, 2) - 4, y0 + 4, '#14181c', 2);
-  // The second row: what's happening now, the play clock, and the offense's timeouts and audibles.
+  // The second row: what's happening now and the play clock, then the offense's timeouts below.
   if (!second) return;
   const y1 = y0 + rowH + 4;
   if (line) drawText(ctx, line, x0, y1, '#ffffff', 2);
@@ -96,12 +96,11 @@ export function drawHud(ctx: CanvasRenderingContext2D, m: MatchState, clock: num
   }
   // Below the block, in the corner, so a long down-and-distance can't run into them.
   const py = y0 + rowH + 22 + 4;
+  const slots = Math.max(m.timeouts[pos], 3);
   ctx.fillStyle = '#000';
-  ctx.fillRect(x0 - 4, py - 4, 88, 18);
+  ctx.fillRect(x0 - 4, py - 4, 24 + slots * 6, 18);
   drawText(ctx, 'TO', x0, py, '#a8c0ff');
-  const after = pips(ctx, x0 + 16, py, m.timeouts[pos], Math.max(m.timeouts[pos], 3), '#ffd23f');
-  drawText(ctx, 'AU', after + 4, py, '#a8c0ff');
-  pips(ctx, after + 20, py, Math.min(m.audibles[pos], 3), 3, '#4ee07a');
+  pips(ctx, x0 + 16, py, m.timeouts[pos], slots, '#ffd23f');
 }
 
 function playTypeText(m: MatchState): string {

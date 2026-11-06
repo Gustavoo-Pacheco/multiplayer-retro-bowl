@@ -42,12 +42,14 @@ export function openPrefs(): void {
 }
 
 const CONTROLS: [string, string, string][] = [
+  ["Call the coach's pick", 'Tap the big card', 'Space'],
+  ['Call another play', 'Tap a tab, then a card', 'Q, E, then 1 to 6'],
   ['Snap', 'Tap the field', 'Space'],
-  ['Audible, timeout', 'Buttons', 'A, T'],
+  ['Timeout', 'Button', 'T'],
   ['Aim', 'Press, drag away from the target, hold', ''],
   ['Throw', 'Release', ''],
   ['Bullet pass', 'Second finger, or right button', 'Space while aiming'],
-  ['Hand off', 'Tap the RB', 'H'],
+  ['Keep it on a run', 'Tap the QB before the handoff', 'Arrow'],
   ['QB run', 'Tap the QB', 'Arrow'],
   ['Juke', 'Swipe up or down', 'Up, Down, W, S'],
   ['Stiff arm', 'Swipe toward a nearby defender', 'Arrow toward them'],
@@ -63,7 +65,7 @@ export function openHelp(): void {
   clear(rows);
   for (const [a, b, c] of CONTROLS) rows.append(h('tr', {}, h('th', {}, a), h('td', {}, b), h('td', {}, c)));
   modal('help-panel', 'How to play',
-    h('p', {}, 'Two players. Whoever has the ball plays it, and the other one watches. The computer plays defense. If you intercept or recover a fumble, the ball is yours and your runner keeps going.'),
+    h('p', {}, 'Two players. Before each play both sides have seven seconds in the huddle to call a play, or the coach calls it for you. Whoever has the ball plays it, and the other one watches. The computer plays the defenders. If you intercept or recover a fumble, the ball is yours and your runner keeps going.'),
     h('div', { class: 'help-scroll' }, h('table', { class: 'help-table' }, h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Mouse or touch'), h('th', {}, 'Keys'))), rows)),
   );
 }

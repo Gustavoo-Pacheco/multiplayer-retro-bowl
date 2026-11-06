@@ -21,7 +21,8 @@ input { font:inherit; color:var(--text); background:var(--panel-dark); border:2p
 .stage canvas { display:block; width:100%; height:100%; image-rendering:pixelated; touch-action:none; }
 .overlay { position:absolute; inset:0; pointer-events:none; }
 .overlay button, .overlay a, .overlay input { pointer-events:auto; }
-.hud-banner { position:absolute; left:50%; bottom:7%; transform:translateX(-50%); background:#000; color:#fff; padding:2px 10px; white-space:nowrap; }
+/* On the grass strip under the near sideline, so it never covers players on the field. */
+.hud-banner { position:absolute; left:50%; bottom:calc(var(--u) * 2); transform:translateX(-50%); background:#000; color:#fff; padding:2px 10px; white-space:nowrap; }
 
 .hud { position:absolute; inset:0; font-size:calc(var(--u) * 8); }
 .hud button { font:400 calc(var(--u) * 8)/1.1 var(--font); padding:calc(var(--u) * 3) calc(var(--u) * 6); border-width:calc(var(--u) * 1); text-shadow:none; background:var(--panel); }

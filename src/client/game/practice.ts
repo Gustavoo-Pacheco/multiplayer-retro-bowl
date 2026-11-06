@@ -1,7 +1,7 @@
 // Repeated plays on one screen, with no rules: the M1 and M2 playground, kept as a dev tool.
 import { emptyFrame, frameFromSim } from '../../shared/protocol';
 import { DIFFICULTY } from '../../shared/data/config';
-import { pickPlay } from '../../shared/data/playbook';
+import { DEF_CALLS, PLAYBOOK } from '../../shared/data/playbook';
 import { adjustScore, buildRoster, type RosterPlayer } from '../../shared/data/roster';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { mixSeed } from '../../shared/sim/rng';
@@ -14,7 +14,7 @@ import { GestureRecognizer } from '../input/gestures';
 import { bindPointer } from '../input/pointer';
 import { teamKit } from '../art/palette';
 import { buildField } from '../render/field';
-import { drawScene, type SceneInfo } from '../render/scene';
+import { drawScene, routeLines, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
 import { Camera, screenX, screenY } from '../render/view';
 import { mountDevPanel } from '../ui/dev-panel';
@@ -41,6 +41,11 @@ export function startPractice(parent: HTMLElement): void {
   const cam = new Camera();
   const frame = emptyFrame();
   let playNo = 0;
+  // ?play=N and ?defense=N pin the calls; otherwise it cycles through the pass plays against each defense.
+  const passPlays = PLAYBOOK.filter((p) => p.kind === 'pass').map((p) => p.id);
+  const pinned = (key: string, n: number) => { const v = Number(params.get(key)); return params.has(key) && Number.isInteger(v) && v >= 0 && v < n ? v : null; };
+  const pinPlay = pinned('play', PLAYBOOK.length);
+  const pinDef = pinned('defense', DEF_CALLS.length);
   const stats = { plays: 0, att: 0, comp: 0, ends: [] as string[] };
   let sim!: SimState;
   let info!: SceneInfo;
@@ -49,19 +54,20 @@ export function startPractice(parent: HTMLElement): void {
   const newPlay = () => {
     playNo += 1;
     const seed = mixSeed(12345, playNo);
-    const play = pickPlay((seed % 1000) / 1000, 1, 10);
+    const playbook = pinPlay ?? passPlays[(playNo - 1) % passPlays.length];
+    const defense = pinDef ?? (playNo - 1) % DEF_CALLS.length;
     const dir: 1 | -1 = 1;
-    const desc: PlayDesc = { id: playNo, type: 'scrimmage', seed, offense: 0 as Seat, dir, los: 40, down: 1, toGo: 10, playbook: play.id, clock: 180 };
+    const desc: PlayDesc = { id: playNo, type: 'scrimmage', seed, offense: 0 as Seat, dir, los: 40, down: 1, toGo: 10, playbook, defense, clock: 180 };
     sim = createPlay(desc, teams, cfg);
     info = {
       desc, seats: sim.players.map((p) => p.seat), roles: sim.players.map((p) => p.role), kits,
-      routes: sim.players.filter((p) => p.route).map((p) => ({ i: p.i, pts: p.route! })),
+      routes: routeLines(sim),
       slots: sim.players.map((p) => p.slot), skins: sim.players.map((p) => p.slot % 4), stars: sim.players.map(() => false), names: sim.players.map(() => ''),
       firstDownX: desc.los + dir * desc.toGo, aimAlpha: aimFadeAlpha(sim, false), field,
     };
     cam.snap(desc.los + dir * T.view.camLead);
     g.reset();
-    banner.textContent = 'Tap to snap';
+    banner.textContent = `${PLAYBOOK[playbook].name} vs ${DEF_CALLS[defense].name}. Tap to snap`;
   };
   newPlay();
   if (params.has('dev')) mountDevPanel(stage.overlay, { force: (what) => { sim.force = what; } });
@@ -77,9 +83,8 @@ export function startPractice(parent: HTMLElement): void {
 
   const syncGestures = () => {
     g.ctx = {
-      phase: sim.phase, active: true, handoffOpen: sim.phaseT <= T.pocket.handoffWindow,
+      phase: sim.phase, active: true,
       qb: { x: screenX(sim.players[0].x, cam.x), y: screenY(sim.players[0].y) },
-      rb: { x: screenX(sim.players[1].x, cam.x), y: screenY(sim.players[1].y) },
     };
   };
   let last = performance.now();

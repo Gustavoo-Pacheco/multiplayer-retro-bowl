@@ -1,4 +1,5 @@
 // A bot that plays through the same inputs a person uses. Runs in balance tests and in browsers with ?bot=1.
+import { isRunKind, PLAYBOOK } from '../data/playbook';
 import { rnd, type HasRng } from './rng';
 import { T } from './tuning';
 import { dirOf, type SimInput, type SimPlayer, type SimState } from './state';
@@ -18,9 +19,14 @@ function resetForPlay(b: BotState, s: SimState): void {
   const B = T.bot;
   b.playId = s.desc.id;
   const r = rnd(b);
-  const inRange = s.desc.toGo <= 3 ? 0.2 : 0;
-  b.plan = r < B.qbRunChance ? 'qb' : r < B.qbRunChance + B.runChance + inRange ? 'run' : 'pass';
-  b.holdUntil = B.holdLo + (B.holdHi - B.holdLo) * rnd(b);
+  const play = PLAYBOOK[s.desc.playbook] ?? PLAYBOOK[0];
+  // The call decides: a designed run hands off by itself, and a pass is held as long as its routes need.
+  b.plan = isRunKind(play.kind) ? 'run' : r < B.qbRunChance ? 'qb' : 'pass';
+  const [lo, hi] = play.kind === 'screen' ? (play.rb === 'screen' ? [B.holdScreenLo, B.holdScreenHi] : [B.holdBubbleLo, B.holdBubbleHi])
+    : play.cat === 'short' ? [B.holdShortLo, B.holdShortHi]
+    : play.kind === 'pa' ? [B.holdPaLo, B.holdPaHi]
+    : [B.holdLo, B.holdHi];
+  b.holdUntil = lo + (hi - lo) * rnd(b);
   b.snapDelay = rnd(b) * 0.4;
   b.aimT = -1;
   b.target = -1;
@@ -29,9 +35,11 @@ function resetForPlay(b: BotState, s: SimState): void {
 }
 
 /** Where a receiver will be `t` seconds from now, following their route. */
-export function predictReceiver(p: SimPlayer, t: number): { x: number; y: number } {
+export function predictReceiver(p: SimPlayer, t: number, dir: 1 | -1 = 1): { x: number; y: number } {
   let x = p.x;
   let y = p.y;
+  let vx = p.vx;
+  let vy = p.vy;
   let left = t;
   const speed = p.top;
   const r = p.route;
@@ -40,14 +48,39 @@ export function predictReceiver(p: SimPlayer, t: number): { x: number; y: number
       const dx = r[i] - x;
       const dy = r[i + 1] - y;
       const d = Math.hypot(dx, dy);
+      if (d < 1e-6) continue;
       const need = d / speed;
+      vx = (dx / d) * speed;
+      vy = (dy / d) * speed;
       if (need <= left) { x = r[i]; y = r[i + 1]; left -= need; }
-      else { x += (dx / d) * speed * left; y += (dy / d) * speed * left; left = 0; }
+      else { x += vx * left; y += vy * left; left = 0; }
     }
   }
-  if (left > 0 && !p.routeStop) {
-    const n = Math.hypot(p.vx, p.vy);
-    if (n > 0.5) { x += (p.vx / n) * speed * left; y += (p.vy / n) * speed * left; }
+  if (left > 0 && !p.routeStop && Math.hypot(vx, vy) > 0.5) {
+    // Past the end of the route, in short steps with the same turn rate and sideline rule as the route AI.
+    const lo = T.field.routeRoom;
+    const hi = T.field.width - T.field.routeRoom;
+    for (let guard = 0; left > 1e-6 && guard < 80; guard++) {
+      const h = Math.min(0.05, left);
+      const n = Math.hypot(vx, vy) || 1;
+      let ux = vx / n;
+      let uy = vy / n;
+      if (y < lo && uy < 0) uy = 0;
+      if (y > hi && uy > 0) uy = 0;
+      if (ux * dir < 0) ux = 0;
+      if (Math.abs(uy) < 0.2 && Math.abs(ux) < 0.2) { ux = dir; uy = 0; }
+      const m = Math.hypot(ux, uy) || 1;
+      const ax = (ux / m) * speed - vx;
+      const ay = (uy / m) * speed - vy;
+      const an = Math.hypot(ax, ay);
+      const max = T.speed.accel * h;
+      if (an > max) { vx += (ax / an) * max; vy += (ay / an) * max; } else { vx += ax; vy += ay; }
+      x += vx * h;
+      y += vy * h;
+      left -= h;
+    }
+    // The route AI turns them before they get far past their room.
+    y = Math.max(lo - 0.6, Math.min(hi + 0.6, y));
   }
   return { x, y: Math.max(0.3, Math.min(T.field.width - 0.3, y)) };
 }
@@ -60,12 +93,12 @@ function chooseThrow(s: SimState, b: BotState): { dx: number; dy: number; openne
   let bestScore = -1e9;
   const B = T.bot;
   for (const p of s.players) {
-    if (p.seat !== qb.seat || p.role === 'OL' || p.role === 'QB' || p.job === 'block' || p.job === 'mesh') continue;
+    if (p.seat !== qb.seat || p.job !== 'route') continue;
     let t = Math.hypot(p.x - qb.x, p.y - qb.y) / T.pass.speed;
     let fx = p.x;
     let fy = p.y;
     for (let i = 0; i < 3; i++) {
-      const f = predictReceiver(p, t);
+      const f = predictReceiver(p, t, dir);
       fx = f.x; fy = f.y;
       t = Math.hypot(fx - qb.x, fy - qb.y) / T.pass.speed;
     }
@@ -98,7 +131,7 @@ export function botInputs(s: SimState, b: BotState, seat: number): SimInput[] {
       break;
     case 'pocket': {
       if (s.control !== seat || s.ball.holder !== 0) break;
-      if (b.plan === 'run' && s.phaseT >= 0.25) { out.push({ k: 'handoff' }); break; }
+      if (b.plan === 'run') break;
       if (b.plan === 'qb' && s.phaseT >= 0.9) { out.push({ k: 'qbRun' }); break; }
       const qb = s.players[0];
       let pressure = 99;
@@ -130,7 +163,8 @@ export function botInputs(s: SimState, b: BotState, seat: number): SimInput[] {
         if (!near && rnd(b) < 0.1) out.push({ k: 'tap' });
         break;
       }
-      if (b.passive) break;
+      // A sneak is a push into the pile: no moves until he's through it.
+      if (b.passive || s.g.sneakPush) break;
       const dir = dirOf(s, p.seat);
       for (const d of s.players) {
         if (d.seat === p.seat || d.stun > 0 || d.engaged >= 0) continue;

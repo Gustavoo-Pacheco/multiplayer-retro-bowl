@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { advanceBanner, afterCoinToss, applyAudible, applyChoice, applyResult, applySnap, applyTimeout, awayKits, canAudible, canTimeout, concede, createMatch, defaultChoice, effectiveRoster, fieldGoalDistance, isResultValid, simContext, voidPlay, type MatchState } from '../../src/shared/rules/match';
+import { advanceBanner, afterCoinToss, applyCall, applyChoice, applyResult, applySnap, applyTimeout, awayKits, callerOf, canCall, canTimeout, concede, createMatch, defaultChoice, effectiveRoster, fieldGoalDistance, huddleTimeout, isResultValid, simContext, viewFor, voidPlay, type MatchState } from '../../src/shared/rules/match';
+import { DEF_CALLS, PLAYBOOK } from '../../src/shared/data/playbook';
 import { DEFAULT_CONFIG } from '../../src/shared/data/config';
 import { inPlay, match, result } from './helpers';
 
@@ -85,7 +86,7 @@ describe('clock', () => {
     expect(after.banner?.kind).toBe('twoMin');
     expect(after.clock).toBe(mark - 1);
     expect(after.runoffPending).toBe(false);
-    expect(advanceBanner(after).phase).toBe('presnap');
+    expect(advanceBanner(after).phase).toBe('huddle');
   });
   it('the two-minute warning fires once a half, and not in odd quarters', () => {
     const q1 = live(inPlay({ quarter: 3 }, { clock: 125, period: 1 }));
@@ -378,15 +379,14 @@ function reachOt(over = {}): MatchState {
 /** Puts overtime's receiving team on offense in midfield. */
 function otOnOffense(a: MatchState, down = 1): MatchState {
   const first = a.ot!.first;
-  return { ...a, phase: 'presnap', possession: first, ballX: 60, down, toGo: 10, chosen4th: down === 4, play: { id: 500, type: 'scrimmage', seed: 1, offense: first, dir: a.attack[first], los: 60, down, toGo: 10, playbook: 1, clock: a.clock }, playId: 500 };
+  return { ...a, phase: 'presnap', possession: first, ballX: 60, down, toGo: 10, chosen4th: down === 4, play: { id: 500, type: 'scrimmage', seed: 1, offense: first, dir: a.attack[first], los: 60, down, toGo: 10, playbook: 6, defense: 0, clock: a.clock }, playId: 500 };
 }
 
 describe('overtime', () => {
-  it('starts with a coin flip, 2 timeouts each, and audibles reset', () => {
+  it('starts with a coin flip and 2 timeouts each', () => {
     const a = reachOt();
     expect(a.period).toBe(5);
     expect(a.timeouts).toEqual([2, 2]);
-    expect(a.audibles).toEqual([3, 3]);
     expect(a.clock).toBe(180);
     const next = advanceBanner(a);
     expect(next.kicker).toBe(1 - a.ot!.first);
@@ -415,7 +415,7 @@ describe('overtime', () => {
     expect(afterFg.ot?.stage).toBe('answer');
     // The other team's drive fails: turnover on downs.
     const other = (1 - f) as 0 | 1;
-    const drive: MatchState = { ...afterFg, phase: 'presnap', possession: other, ballX: 60, down: 4, toGo: 5, chosen4th: true, play: { id: 600, type: 'scrimmage', seed: 1, offense: other, dir: afterFg.attack[other], los: 60, down: 4, toGo: 5, playbook: 1, clock: afterFg.clock }, playId: 600 };
+    const drive: MatchState = { ...afterFg, phase: 'presnap', possession: other, ballX: 60, down: 4, toGo: 5, chosen4th: true, play: { id: 600, type: 'scrimmage', seed: 1, offense: other, dir: afterFg.attack[other], los: 60, down: 4, toGo: 5, playbook: 6, defense: 0, clock: afterFg.clock }, playId: 600 };
     const end = applyResult(live(drive), result(drive, 'incomplete', 60));
     expect(end.phase).toBe('final');
     expect(end.winner).toBe(f);
@@ -426,7 +426,7 @@ describe('overtime', () => {
     const fg = applyChoice({ ...o, phase: 'choice4th', play: null, chosen4th: false }, 'fg');
     const afterFg = applyResult(live(fg), result(fg, 'fgGood', 60, { type: 'fieldGoal' }));
     const other = (1 - f) as 0 | 1;
-    const drive: MatchState = { ...afterFg, phase: 'presnap', possession: other, ballX: 60, down: 1, toGo: 10, play: { id: 600, type: 'scrimmage', seed: 1, offense: other, dir: afterFg.attack[other], los: 60, down: 1, toGo: 10, playbook: 1, clock: afterFg.clock }, playId: 600 };
+    const drive: MatchState = { ...afterFg, phase: 'presnap', possession: other, ballX: 60, down: 1, toGo: 10, play: { id: 600, type: 'scrimmage', seed: 1, offense: other, dir: afterFg.attack[other], los: 60, down: 1, toGo: 10, playbook: 6, defense: 0, clock: afterFg.clock }, playId: 600 };
     const end = applyResult(live(drive), result(drive, 'td', drive.attack[other] > 0 ? 110 : 10));
     expect(end.winner).toBe(other);
     expect(end.phase).toBe('final');
@@ -480,11 +480,11 @@ describe('overtime', () => {
   });
 });
 
-describe('timeouts and audibles', () => {
+describe('timeouts', () => {
   it('a timeout on 4th down reopens the choice', () => {
     let m: MatchState = { ...inPlay({}, { down: 4, toGo: 3 }), phase: 'choice4th' as const, play: null };
     m = applyChoice(m, 'go') ;
-    expect(m.phase).toBe('presnap');
+    expect(m.phase).toBe('huddle');
     const t = applyTimeout(m, 0);
     expect(t.phase).toBe('choice4th');
     expect(t.timeouts[0]).toBe(m.timeouts[0] - 1);
@@ -515,23 +515,109 @@ describe('timeouts and audibles', () => {
     const m = inPlay({}, { timeouts: [0, 3] });
     expect(canTimeout(m, 0)).toBe(false);
   });
-  it('timeouts and audibles reset at halftime', () => {
-    const m = live(inPlay({}, { clock: 1, period: 2, timeouts: [0, 1], audibles: [0, 2] }));
+  it('timeouts reset at halftime', () => {
+    const m = live(inPlay({}, { clock: 1, period: 2, timeouts: [0, 1] }));
     const a = applyResult(m, result(m, 'tackle', 72, { clock: 0 }));
     expect(a.timeouts).toEqual([3, 3]);
-    expect(a.audibles).toEqual([3, 3]);
   });
   it.each([['auto', 1, 2], ['auto', 2, 2], ['auto', 3, 3], ['auto', 5, 3], [1, 3, 1]] as const)('timeouts %s with %i-minute quarters give %i', (t, q, n) => {
     expect(match({ timeouts: t, quarter: q }).timeouts).toEqual([n, n]);
   });
-  it('an audible swaps the play and uses one from the pool', () => {
-    const m = inPlay();
-    const a = applyAudible(m, 0);
-    expect(a.audibles[0]).toBe(m.audibles[0] - 1);
-    expect(a.play?.playbook).not.toBe(m.play?.playbook);
-    expect(a.playId).toBe(m.playId + 1);
-    expect(canAudible(inPlay({}, { audibles: [0, 0] }), 0)).toBe(false);
-    expect(canAudible(m, 1)).toBe(false);
+});
+
+/** The next play's huddle, after a short gain from the 50. */
+function huddle(over = {}, patch: Partial<MatchState> = {}): MatchState {
+  const m = live(inPlay(over, patch));
+  const a = applyResult(m, result(m, 'tackle', 54));
+  expect(a.phase).toBe('huddle');
+  return a;
+}
+
+describe('the huddle', () => {
+  it('every play from scrimmage starts in a huddle, with a coach\'s pick for each side', () => {
+    const h = huddle();
+    expect(h.huddle?.calls).toEqual([-1, -1]);
+    expect(h.play?.playbook).toBe(-1);
+    const [o, d] = h.huddle!.suggest;
+    expect(PLAYBOOK[o]).toBeDefined();
+    expect(DEF_CALLS[d]).toBeDefined();
+    expect(h.huddle?.computer).toBe(false);
+  });
+  it('each side calls its own play, once, and the huddle breaks when both are in', () => {
+    const h = huddle();
+    const off = h.play!.offense;
+    const def = (1 - off) as 0 | 1;
+    expect(callerOf(h, 'off')).toBe(off);
+    expect(callerOf(h, 'def')).toBe(def);
+    expect(canCall(h, def, 'off', 7)).toBe(false);
+    expect(canCall(h, off, 'def', 3)).toBe(false);
+    expect(canCall(h, off, 'off', PLAYBOOK.length)).toBe(false);
+    expect(canCall(h, def, 'def', -1)).toBe(false);
+    const a = applyCall(h, off, 'off', 7);
+    expect(a.phase).toBe('huddle');
+    expect(applyCall(a, off, 'off', 8)).toBe(a);
+    const b = applyCall(a, def, 'def', 3);
+    expect(b.phase).toBe('presnap');
+    expect(b.play?.playbook).toBe(7);
+    expect(b.play?.defense).toBe(3);
+    expect(b.huddle).toBeNull();
+    expect(b.recent[off].at(-1)).toBe(7);
+  });
+  it("time's up: whoever hasn't called gets the coach's pick", () => {
+    const h = huddle();
+    const a = applyCall(h, h.play!.offense, 'off', 12);
+    const b = huddleTimeout(a);
+    expect(b.phase).toBe('presnap');
+    expect(b.play?.playbook).toBe(12);
+    expect(b.play?.defense).toBe(h.huddle!.suggest[1]);
+    const c = huddleTimeout(h);
+    expect([c.play?.playbook, c.play?.defense]).toEqual(h.huddle!.suggest);
+  });
+  it('with the computer on defense, its call is in from the start', () => {
+    const h = huddle({ defense: 'computer' });
+    expect(h.huddle?.computer).toBe(true);
+    expect(DEF_CALLS[h.huddle!.calls[1]]).toBeDefined();
+    expect(callerOf(h, 'def')).toBeNull();
+    const a = applyCall(h, h.play!.offense, 'off', 0);
+    expect(a.phase).toBe('presnap');
+    expect(a.play?.defense).toBe(h.huddle!.calls[1]);
+  });
+  it("each seat's view hides the other side's call and its pick", () => {
+    const h = huddle();
+    const off = h.play!.offense;
+    const def = (1 - off) as 0 | 1;
+    const a = applyCall(h, off, 'off', 9);
+    expect(viewFor(a, def).huddle?.calls).toEqual([-2, -1]);
+    expect(viewFor(a, def).huddle?.suggest[0]).toBe(-1);
+    expect(viewFor(a, def).huddle?.suggest[1]).toBe(h.huddle!.suggest[1]);
+    expect(viewFor(a, off).huddle?.calls).toEqual([9, -1]);
+    expect(viewFor(a, off).huddle?.suggest[1]).toBe(-1);
+    // One screen for both: both picks show, no call does.
+    expect(viewFor(a, 'shared').huddle?.calls).toEqual([-2, -1]);
+    expect(viewFor(a, 'shared').huddle?.suggest).toEqual(h.huddle!.suggest);
+    expect(viewFor(a, off).huddle).not.toBe(a.huddle);
+    expect(a.huddle?.calls).toEqual([9, -1]);
+  });
+  it('a timeout in the huddle sends both sides back with fresh calls', () => {
+    const h = huddle({}, { timeouts: [3, 3] });
+    const off = h.play!.offense;
+    const a = applyCall(h, off, 'off', 4);
+    expect(canTimeout(a, off)).toBe(true);
+    const t = applyTimeout(a, off);
+    expect(t.phase).toBe('huddle');
+    expect(t.huddle?.calls).toEqual([-1, -1]);
+    expect(t.timeouts[off]).toBe(2);
+  });
+  it('the last plays are kept for the coach to read tendencies, eight at most', () => {
+    let m = huddle();
+    const off = m.play!.offense;
+    for (let i = 0; i < 10; i++) {
+      m = huddleTimeout(applyCall(m, off, 'off', i));
+      m = applyResult(live(m), result(m, 'tackle', m.ballX + m.attack[off] * 2));
+      expect(m.phase).toBe('huddle');
+      m = { ...m, down: 1 };
+    }
+    expect(m.recent[off]).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
   });
 });
 
@@ -540,7 +626,8 @@ describe('other events', () => {
     const pre = inPlay({}, { clock: 100, down: 3, toGo: 4 });
     const v = voidPlay(pre);
     expect([v.down, v.toGo, v.ballX, v.clock]).toEqual([3, 4, 50, 100]);
-    expect(v.phase).toBe('presnap');
+    // A new snap of the same down, so a new huddle.
+    expect(v.phase).toBe('huddle');
     expect(v.playId).toBeGreaterThan(pre.playId);
   });
   it('conceding ends the match for the other seat', () => {

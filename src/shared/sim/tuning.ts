@@ -3,10 +3,16 @@ export const T = {
   hz: 60,
   chance: { min: 0.02, max: 0.98 },
 
-  field: { len: 120, ez: 10, width: 17.2, center: 8.6, oobMargin: 0.1 },
+  /**
+   * Formations are placed from the center, so the width only adds room at the sidelines.
+   * routeRoom keeps route ends that far inside a sideline. Figures are drawn upward from their
+   * feet, so a receiver hugging the far sideline would otherwise stand over the bench.
+   */
+  field: { len: 120, ez: 10, width: 22.4, center: 11.2, oobMargin: 0.1, routeRoom: 2.8 },
   view: {
     w: 640, h: 360, yards: 48,
-    standsH: 61, walkH: 9, stripH: 13, fieldH: 230, grassH: 47,
+    // standsH + walkH + stripH + fieldH + grassH = h.
+    standsH: 46, walkH: 9, stripH: 13, fieldH: 262, grassH: 30,
     camEase: 5, camLead: 6, spriteH: 26,
   },
 
@@ -22,16 +28,23 @@ export const T = {
     staminaLoss: 0.15, staminaYards: 70, conditionWeight: 0.12, dropBackSpeed: 4.5,
   },
 
-  pocket: { dropDepth: 2.5, handoffWindow: 1.2, aimMinHold: 0.12, aimDeadZone: 2.0 },
+  pocket: { dropDepth: 2.5, aimMinHold: 0.12, aimDeadZone: 2.0 },
 
   pass: {
     speed: 25, bulletMult: 1.6, arcPerYard: 0.16, bulletArcPerYard: 0.05, minPeak: 0.8, throwHeight: 1.8, catchHeight: 1.2,
+    /**
+     * Past arcFrom yards the arc climbs faster than the distance, so a deep ball is lofted
+     * instead of driven. skyMargin is the screen pixels kept clear above the top of the arc.
+     */
+    arcGrowth: 0.0031, arcFrom: 15, skyMargin: 8,
     rangeLo: 20, rangeHi: 65,
     errorPerAccuracyDeg: 0.4, fatigueErrorDeg: 2.5,
     armFatigueLo: 0.005, armFatigueHi: 0.02, armFatigueMax: 0.25,
-    catchRadius: 2.5, catchBase: 0.66, catchPerAttr: 0.04, catchPerMiss: 0.25, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
+    catchRadius: 2.5, catchBase: 0.63, catchPerAttr: 0.04, catchPerMiss: 0.25, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
     weatherPenalty: { clear: 0, rain: 0.1, snow: 0.15, wind: 0.05 } as Record<string, number>,
     pickBase: 0.1, pickPerAttr: 0.03, pickPerDist: 0.1,
+    /** A defender who gets there at a full sprint mostly knocks it away: the pick chance shrinks with his speed. */
+    pickOnTheRun: 0.6,
     windDriftDeg: 2.0,
     piRadius: 1.0, piChance: 0.035, piWindow: 0.35,
   },
@@ -50,16 +63,23 @@ export const T = {
     diveLo: 1, diveHi: 2, diveTime: 0.35, diveSpeed: 7,
     slowMult: 0.55, slowTime: 0.7,
     truckMult: 0.82, truckFill: 1,
-    autoIdle: 1.5, autoLookAhead: 7, autoLanes: 5, autoSideMargin: 1.2, autoLateral: 5, sideMargin: 0.4,
+    autoIdle: 1.5, autoLookAhead: 7, autoLanes: 5, autoSideMargin: 2.8, autoLateral: 5, sideMargin: 0.4,
     condPerTouchLo: 0.01, condPerTouchHi: 0.03,
     injuryChance: 0.005,
+    /** A sneak's surge: how long it lasts, how much harder it is to stop, and how far he falls forward. */
+    sneakSurge: 1.0, sneakHold: 0.3, sneakFall: 1.1,
+    /** How far past the line the QB gets before diving over the pile, the cut for a stacked box, and the odd one that breaks free. */
+    sneakPushLo: 0.2, sneakPushHi: 1.4, sneakStacked: 0.5, sneakBreak: 0.05,
   },
 
   ai: {
     coverCushion: 1.1, coverCushionShort: 0.4, coverSoftExtra: 2.5, coverDepth: 6.5, coverDepthShort: 3.5, softDepthExtra: 2,
     backpedalUntil: 4, ballReact: 9, ballReactDelay: 0.3, coverSpeed: 1,
-    blitzChance: 0.2, softChance: 0.25,
-    rushSpeed: 1, rushShedLo: 0.32, rushShedHi: 0.85, blockStrFactor: 0.03, pushBase: 0.45, pushPerStr: 0.1,
+    pressDepth: 1.4, pressJam: 0.45, pressSlow: 0.4,
+    zoneLook: 0.4, zoneCushion: 2.3, zoneUnder: 1.3, zoneInside: 0.8, zoneInsideDeep: 0.6, zoneSlack: 1.2, zoneSpeed: 0.92, zoneShade: 1.5,
+    ratSpeed: 0.7, crashSpeed: 1.0, blitzDepth: 3, paBite: 0.55, paBiteSafety: 0.3, paBiteSpeed: 0.8,
+    stalkRange: 9, stalkHold: 1.3, runBlockHold: 0.85,
+    rushSpeed: 1, rushShedLo: 0.3, rushShedHi: 0.72, blockStrFactor: 0.03, pushBase: 0.45, pushPerStr: 0.1,
     freeRushSpeedCap: 7.2,
     pursuitLead: 1.0, pursuitLag: 0.15, pursuitSpeed: 1.02,
     blockEngage: 1.1, blockHold: 0.85, blockHoldPerStr: 0.06, blockShedStun: 0.5, blockKeepOff: 0.9, blockFieldRange: 10,
@@ -67,7 +87,17 @@ export const T = {
     defenderMissAfterJuke: 0.2,
   },
 
-  play: { bigGain: 20, bigReturn: 30, deadHold: 1.1, celebrateHold: 1.6, routeArriveRadius: 0.5, hitchSpeed: 0.5 },
+  play: {
+    bigGain: 20, bigReturn: 30, deadHold: 1.1, celebrateHold: 1.6, routeArriveRadius: 0.5, hitchSpeed: 0.5,
+    /** The back checks for a blitz this long before he releases on a route. */
+    rbRelease: 0.35,
+    /** On a screen the back blocks this long, and the linemen let their men go at screenRelease. */
+    screenSell: 0.7, screenRelease: 0.85,
+    /** The back starts for the mesh this long before it's due. Draws wait for it. */
+    meshLead: 0.45, meshReach: 1.1, meshLate: 0.6, paFakeRun: 0.5,
+    /** A mesh this late is a draw: it sells pass, so the linebackers drop instead of stepping up. */
+    drawMesh: 0.9,
+  },
 
   fumble: { bounceLo: 0.5, bounceHi: 1.1, speedLo: 2, speedHi: 7, recoverRadius: 1.0, recoverMinTime: 0.25, recoverChance: 0.25, friction: 2.2, popZ: 4, maxLoose: 7 },
 
@@ -103,6 +133,8 @@ export const T = {
     coinToss: 2800, banner: 2200, scoreBanner: 2600, quarterBreak: 3000, halftime: 7000, twoMinute: 2200, replay: 6000, replayBig: 20,
     pause: 60000, watchdog: 5000, watchdogTick: 1000, cleanup: 2 * 3600 * 1000, handoffBanner: 600,
     choiceDefaultGrace: 300,
+    /** Time to call a play, and the break from the huddle to the line. */
+    huddle: 7000, huddleBreak: 900,
   },
   dev: { lowClock: 15, forceHoldInt: 0.6, forceHoldSack: 99 },
   replay: { rate: 0.8, bufferFrames: 1200 },
@@ -115,7 +147,8 @@ export const T = {
     aimScale: 0.26, touchTargetMult: 2, touchRadius: 26,
   },
   bot: {
-    holdLo: 0.9, holdHi: 3.4, runChance: 0.3, qbRunChance: 0.03, aimErrorYards: 0.6, leadSteps: 8,
+    holdLo: 1.5, holdHi: 3.4, holdShortLo: 0.9, holdShortHi: 2.5, holdPaLo: 1.6, holdPaHi: 3.0,
+    holdScreenLo: 1.0, holdScreenHi: 1.3, holdBubbleLo: 0.35, holdBubbleHi: 0.6, qbRunChance: 0.03, aimErrorYards: 0.6, leadSteps: 8,
     swipeChance: 0.03, jukeRange: 4, goForItToGo: 2, punchChance: 0.5, needCap: 7, valueShort: 0.3, valueDeep: 0.2, valueOpen: 1.2, panicRange: 2.5, panicChance: 0.05, kickMeterSlop: 0.09, kickAimSlop: 0.3,
   },
 };

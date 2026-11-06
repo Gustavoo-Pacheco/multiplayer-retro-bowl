@@ -1,6 +1,6 @@
 # Borg Bowl
 
-A private two-player American football game for phones and desktop browsers, drawn in an original retro pixel style. One player creates a room and sends the link. Whoever has the ball plays it, the other watches, and the computer plays defense for both. An interception or lost fumble hands control to the other player mid-play.
+A private two-player American football game for phones and desktop browsers, drawn in an original retro pixel style. One player creates a room and sends the link. Before every snap both players get seven seconds in the huddle to call a play, or take the coach's pick. Then whoever has the ball plays it, the other watches, and the computer moves the defenders. An interception or lost fumble hands control to the other player mid-play.
 
 It runs on Cloudflare's free plan: a Worker, plus one Durable Object per room. There are no runtime libraries.
 
@@ -20,7 +20,7 @@ Open the address it prints, then open the invite link in a second window to play
 | `/` | Title screen: create a game, or join with a code |
 | `/r/K7P2QX` | Joins that room |
 | `/?local=1&q=3&a=SEA&b=LAR` | One match on one device, taking turns. Add `&weather=snow` or `&replays=big` to change those settings |
-| `/?practice=1` | Repeated pass plays, with no rules or clock |
+| `/?practice=1` | Repeated pass plays against each defensive call, with no rules or clock. `&play=N&defense=N` pins the calls by their place in the playbook, such as `&play=0` for HB Dive |
 | `/dev/sprites` | Every sprite in every team's colours |
 
 Add `?dev=1` to a match or practice address for the developer panel, opened with the DEV button. Add `&bot=1` to let a bot play your side, and `&speed=4` to run the sim faster.
@@ -34,6 +34,12 @@ Add `?dev=1` to a match or practice address for the developer panel, opened with
 | Download last play | Saves that play's frames and state as JSON, for bug reports |
 
 In an online room, tuning edits change only your own browser. The room's timers keep their saved values, since those run on the server.
+
+## Calling plays
+
+The offense's playbook has 24 plays in four tabs (Run, Short, Deep, Special), and the defense has nine calls in three (Man, Zone, Pressure). Each card shows the play drawn out, its formation and the gain it is built for. The big card on the left is the coach's pick for the down, distance, clock and score. Tap it or press Space to call it. Other plays are a tab and a card away, or Q and E then 1 to 6 on a keyboard.
+
+Each side sees only its own pick and call until the huddle breaks. If the seven seconds run out, the coach's pick goes in. The Defense calls setting decides who calls the defense: the player without the ball, or the computer. On one device the offense calls first, then the defense.
 
 ## Test it
 

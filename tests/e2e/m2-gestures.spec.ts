@@ -5,7 +5,8 @@ test('every gesture works by touch on a phone', async ({ baseURL }) => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ ...devices['Pixel 7 landscape'], baseURL });
   const page = await ctx.newPage();
-  await page.goto('/?practice=1');
+  // HB Dive first, for the runner's gestures; the pass plays come after.
+  await page.goto('/?practice=1&play=0');
   await page.waitForFunction(() => !!(window as any).__practice);
   const cdp = await ctx.newCDPSession(page);
   const box = (await page.getByTestId('canvas').boundingBox())!;
@@ -17,18 +18,12 @@ test('every gesture works by touch on a phone', async ({ baseURL }) => {
   const waitPlay = async (phase = 'pre') => { await page.waitForFunction((ph) => (window as any).__practice.sim.phase === ph, phase, { timeout: 15000 }); };
   const clearField = () => page.evaluate(() => { const s = (window as any).__practice.sim; for (const p of s.players) if (p.seat !== 0) { p.job = 'idle'; p.x = 115; } });
 
-  // Handoff: a tap on the RB.
-  const handoffPlay = async () => {
-    await waitPlay('pre');
-    await page.touchscreen.tap(pt(0.9, 0.6).x, pt(0.9, 0.6).y);
-    await waitPlay('pocket');
-    const rb = await page.evaluate(() => (window as any).__practice.screenOf(1));
-    await page.touchscreen.tap(Math.round(rb.x), Math.round(rb.y));
-    await waitPlay('run');
-    await clearField();
-    expect(await sim<number>('s.ball.holder')).toBe(1);
-  };
-  await handoffPlay();
+  // A run: the QB hands off by himself at the mesh.
+  await waitPlay('pre');
+  await page.touchscreen.tap(pt(0.9, 0.6).x, pt(0.9, 0.6).y);
+  await waitPlay('run');
+  await page.waitForFunction(() => (window as any).__practice.sim.ball.holder === 1);
+  await clearField();
 
   // Juke: swipe up.
   await clearInputs(page);
@@ -68,8 +63,10 @@ test('every gesture works by touch on a phone', async ({ baseURL }) => {
   expect(await sim<string>('s.result.end')).toBe('tackle');
   expect(await inputs(page)).toContain('swipe');
 
-  // QB run: a tap on the QB.
+  // QB run on a pass play: a tap on the QB.
   await page.waitForFunction(() => (window as any).__practice.sim.phase === 'pre', undefined, { timeout: 10000 });
+  await page.goto('/?practice=1');
+  await page.waitForFunction(() => (window as any).__practice?.sim.phase === 'pre');
   await page.touchscreen.tap(pt(0.9, 0.6).x, pt(0.9, 0.6).y);
   await waitPlay('pocket');
   const qb = await page.evaluate(() => (window as any).__practice.screenOf(0));

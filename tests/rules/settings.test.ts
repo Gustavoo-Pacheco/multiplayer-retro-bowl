@@ -4,7 +4,7 @@ import { CONFIG_OPTIONS, DEFAULT_CONFIG, DIFFICULTY, PRESETS, type MatchConfig }
 import { adjustScore, buildRoster } from '../../src/shared/data/roster';
 import { TEAM_BY_ID, TEAMS } from '../../src/shared/data/teams';
 import { quarterSeconds, runoffSeconds, timeoutsPerHalf, twoMinuteMark } from '../../src/shared/rules/clock';
-import { afterCoinToss, applyChoice, applyResult, applySnap, createMatch, effectiveRoster, isChoiceLegal, simContext, type MatchState } from '../../src/shared/rules/match';
+import { afterCoinToss, applyChoice, applyResult, applySnap, applyTimeout, createMatch, effectiveRoster, isChoiceLegal, simContext, type MatchState } from '../../src/shared/rules/match';
 import { acceptHandoff, fumbleChance, requestHandoff } from '../../src/shared/sim/contact';
 import { catchChance } from '../../src/shared/sim/pass';
 import { aimFadeAlpha, launch } from '../../src/shared/sim/pass';
@@ -15,10 +15,10 @@ import type { PlayDesc, SimState } from '../../src/shared/sim/state';
 import { T } from '../../src/shared/sim/tuning';
 import { inPlay, match, result } from './helpers';
 
-const play = (over: Partial<MatchConfig> = {}, seed = 12, type: PlayDesc['type'] = 'scrimmage'): SimState => {
+const play = (over: Partial<MatchConfig> = {}, seed = 12, type: PlayDesc['type'] = 'scrimmage', playbook = 6): SimState => {
   const m = match(over);
   const ctx = simContext(m);
-  return createPlay({ id: 1, type, seed, offense: 0, dir: 1, los: 50, down: 1, toGo: 10, playbook: 1, clock: 100 }, ctx.teams, ctx.cfg);
+  return createPlay({ id: 1, type, seed, offense: 0, dir: 1, los: 50, down: 1, toGo: 10, playbook, defense: 0, clock: 100 }, ctx.teams, ctx.cfg);
 };
 const snapped = (over: Partial<MatchConfig> = {}): SimState => { const s = play(over); step(s, [{ k: 'snap' }]); return s; };
 
@@ -47,9 +47,22 @@ describe('time settings', () => {
     expect(run(false).banner?.kind).not.toBe('twoMin');
   });
 
-  it('audibles and pauses per player set their pools', () => {
-    for (const n of CONFIG_OPTIONS.audibles) expect(match({ audibles: n }).audibles).toEqual([n, n]);
+  it('pauses per player set their pools', () => {
     for (const n of CONFIG_OPTIONS.pauses) expect(match({ pauses: n }).pauses).toEqual([n, n]);
+  });
+  it('defense calls: players call their own, or the computer calls one at once', () => {
+    const open = (defense: 'players' | 'computer') => {
+      const m = inPlay({ defense });
+      return applyTimeout({ ...m, phase: 'presnap', timeouts: [3, 3] }, 0);
+    };
+    const players = open('players');
+    expect(players.phase).toBe('huddle');
+    expect(players.huddle?.computer).toBe(false);
+    expect(players.huddle?.calls).toEqual([-1, -1]);
+    const computer = open('computer');
+    expect(computer.huddle?.computer).toBe(true);
+    expect(computer.huddle?.calls[1]).toBeGreaterThanOrEqual(0);
+    expect(CONFIG_OPTIONS.defense).toEqual(['players', 'computer']);
   });
 });
 
@@ -146,7 +159,7 @@ describe('rules settings', () => {
     const worn = (fatigue: boolean) => {
       const m: MatchState = { ...match({ fatigue }), condition: [new Array(17).fill(0.2), new Array(17).fill(0.2)], armFatigue: [0.2, 0.2] };
       const ctx = simContext(m);
-      return { s: createPlay({ id: 1, type: 'scrimmage', seed: 3, offense: 0, dir: 1, los: 50, down: 1, toGo: 10, playbook: 1, clock: 100 }, ctx.teams, ctx.cfg) };
+      return { s: createPlay({ id: 1, type: 'scrimmage', seed: 3, offense: 0, dir: 1, los: 50, down: 1, toGo: 10, playbook: 6, defense: 0, clock: 100 }, ctx.teams, ctx.cfg) };
     };
     const on = worn(true).s;
     const off = worn(false).s;
@@ -169,9 +182,9 @@ describe('rules settings', () => {
       const saved = T.run.injuryChance;
       T.run.injuryChance = 0.5;
       for (let seed = 1; seed <= 120; seed++) {
-        const s = play({ injuries }, seed);
+        // HB Dive: the back takes the handoff and carries into traffic.
+        const s = play({ injuries }, seed, 'scrimmage', 0);
         step(s, [{ k: 'snap' }]);
-        step(s, [{ k: 'handoff' }]);
         for (let i = 0; i < 1500 && !s.finished; i++) { if (s.frozen) acceptHandoff(s); step(s, []); }
         if (s.injury) hurt += 1;
       }
@@ -266,7 +279,7 @@ describe('presets and data', () => {
 
   it('applyChoice keeps a play legal for every 4th-down option', () => {
     const m = inPlay({}, { down: 4, toGo: 3, ballX: 80, phase: 'choice4th' });
-    for (const c of ['go', 'punt', 'fg'] as const) expect(applyChoice({ ...m, phase: 'choice4th', play: null }, c).phase).toBe('presnap');
+    for (const c of ['go', 'punt', 'fg'] as const) expect(applyChoice({ ...m, phase: 'choice4th', play: null }, c).phase).toBe(c === 'go' ? 'huddle' : 'presnap');
     void requestHandoff;
   });
 });

@@ -17,7 +17,7 @@ const teams = (): SimTeams => {
   const u = TEAM_BY_ID.LAR;
   return { rosters: [buildRoster('SEA', t.off, t.def), buildRoster('LAR', u.off, u.def)], cond: [new Array(17).fill(1), new Array(17).fill(1)], armFatigue: [0, 0] };
 };
-const desc = (type: PlayType, over: Partial<PlayDesc> = {}): PlayDesc => ({ id: 3, type, seed: 77, offense: 0, dir: 1, los: 45, down: 1, toGo: 10, playbook: 0, clock: 100, ...over });
+const desc = (type: PlayType, over: Partial<PlayDesc> = {}): PlayDesc => ({ id: 3, type, seed: 77, offense: 0, dir: 1, los: 45, down: 1, toGo: 10, playbook: 6, defense: 0, clock: 100, ...over });
 const make = (type: PlayType, over: Partial<PlayDesc> = {}, c: Partial<SimCfg> = {}): SimState => createPlay(desc(type, over), teams(), cfg(c));
 
 /** Taps at a chosen meter and arrow, then runs to the end. */

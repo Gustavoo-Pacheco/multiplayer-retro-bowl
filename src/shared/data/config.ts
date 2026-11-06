@@ -4,7 +4,8 @@ export interface MatchConfig {
   playClock: 10 | 15 | 25;
   twoMinute: boolean;
   timeouts: 'auto' | 0 | 1 | 2 | 3;
-  audibles: 0 | 1 | 3 | 5;
+  /** Who calls the defense: the player without the ball, or the computer. */
+  defense: 'players' | 'computer';
   pauses: 0 | 2 | 5;
   reconnect: 1 | 2 | 5;
   difficulty: Difficulty;
@@ -28,7 +29,7 @@ export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme';
 export type Weather = 'clear' | 'rain' | 'snow' | 'wind';
 
 export const DEFAULT_CONFIG: MatchConfig = {
-  quarter: 3, playClock: 15, twoMinute: true, timeouts: 'auto', audibles: 3, pauses: 2, reconnect: 2,
+  quarter: 3, playClock: 15, twoMinute: true, timeouts: 'auto', defense: 'players', pauses: 2, reconnect: 2,
   difficulty: 'normal', overtime: 'standard', returns: 'live', onside: true, twoPoint: true, penalties: true,
   fumbles: 'normal', bullet: true, trucking: true, fatigue: true, injuries: false,
   ratings: 'real', weather: 'clear', aimCursor: 'fades', replays: 'big',
@@ -55,7 +56,7 @@ export const CONFIG_OPTIONS: { [K in keyof MatchConfig]: readonly MatchConfig[K]
   playClock: [10, 15, 25],
   twoMinute: [true, false],
   timeouts: ['auto', 0, 1, 2, 3],
-  audibles: [0, 1, 3, 5],
+  defense: ['players', 'computer'],
   pauses: [0, 2, 5],
   reconnect: [1, 2, 5],
   difficulty: ['easy', 'normal', 'hard', 'extreme'],

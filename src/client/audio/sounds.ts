@@ -89,6 +89,8 @@ export const SOUNDS = {
   confirm: (c, o, t) => notes(c, o, t, [880, 1320], 0.06, 0.09, 0.14),
   cancel: (c, o, t) => notes(c, o, t, [660, 440], 0.06, 0.09, 0.14),
   meterTick: (c, o, t) => tone(c, o, t, { f: 2100, dur: 0.015, gain: 0.08 }),
+  /** The huddle breaks: one clap from the whole team. */
+  clap: (c, o, t) => { noise(c, o, t, { dur: 0.07, gain: 0.42, f: 1500, q: 0.9 }); noise(c, o, t, { dur: 0.05, gain: 0.25, f: 2600, q: 1.5, at: 0.012 }); },
   // Stings
   winSting: (c, o, t) => { notes(c, o, t, [523, 659, 784, 1047, 1047, 1319], 0.13, 0.22, 0.2); notes(c, o, t, [131, 196, 262, 196, 262, 330], 0.13, 0.22, 0.2, 'triangle'); },
   lossSting: (c, o, t) => { notes(c, o, t, [392, 349, 311, 262], 0.24, 0.34, 0.18); notes(c, o, t, [98, 98, 78, 65], 0.24, 0.34, 0.2, 'triangle'); },

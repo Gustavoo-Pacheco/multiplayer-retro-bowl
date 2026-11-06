@@ -13,15 +13,17 @@ async function ready(baseURL: string | undefined, qs = 'dev=1&bot=1&speed=2') {
   return { a, b };
 }
 
-/** Which page runs the current scrimmage play from before the snap. */
-async function offenseAtPresnap(a: Player, b: Player, timeout = 120000): Promise<{ off: Player; def: Player }> {
+/** Which page runs the current scrimmage play from before the snap. With `pass`, only a play the bot will throw:
+ *  a called run hands off by itself at the mesh, before any forced pick could happen. */
+async function offenseAtPresnap(a: Player, b: Player, timeout = 120000, pass = false): Promise<{ off: Player; def: Player }> {
   const until = Date.now() + timeout;
   for (;;) {
     for (const [off, def] of [[a, b], [b, a]] as const) {
-      const on = await off.page.evaluate(() => {
+      const on = await off.page.evaluate((pass) => {
         const s = (window as any).__borg;
-        return !!s.sim && s.sim.desc.type === 'scrimmage' && s.sim.phase === 'pre' && s.match?.phase === 'presnap' && s.sim.desc.down < 4;
-      });
+        const thrown = s.bot.playId === s.sim?.desc.id && s.bot.plan !== 'run';
+        return !!s.sim && s.sim.desc.type === 'scrimmage' && s.sim.phase === 'pre' && s.match?.phase === 'presnap' && s.sim.desc.down < 4 && (!pass || thrown);
+      }, pass);
       if (on) return { off, def };
     }
     if (Date.now() > until) throw new Error('no scrimmage play offered');
@@ -40,7 +42,7 @@ async function pocket(off: Player): Promise<void> {
 }
 /** Forces a fumble lost at the next tackle, on a run. */
 async function forceFumble(off: Player): Promise<void> {
-  await off.page.evaluate(() => { const s = (window as any).__borg; s.bot.plan = 'run'; s.sim.force = 'fumble'; s.bot.playId = s.sim.desc.id; });
+  await off.page.evaluate(() => { const s = (window as any).__borg; s.bot.plan = 'qb'; s.sim.force = 'fumble'; s.bot.playId = s.sim.desc.id; });
 }
 
 async function handoffCount(p: Player): Promise<number> { return (await snap(p.page)).handoffs; }
@@ -48,7 +50,7 @@ async function handoffCount(p: Player): Promise<number> { return (await snap(p.p
 test('a forced interception at 300 ms hands control over and the old controller becomes the watcher', async ({ baseURL }) => {
   const { a, b } = await ready(baseURL);
   try {
-    const { off, def } = await offenseAtPresnap(a, b);
+    const { off, def } = await offenseAtPresnap(a, b, 120000, true);
     a.proxy.setDelay(DELAY, 30);
     b.proxy.setDelay(DELAY, 30);
     const before = await handoffCount(def);
@@ -111,7 +113,7 @@ test('an interception then a fumble back: two handoffs on one play', async ({ ba
     b.proxy.setDelay(DELAY);
     let done = false;
     for (let tries = 0; tries < 12 && !done; tries++) {
-      const { off, def } = await offenseAtPresnap(a, b);
+      const { off, def } = await offenseAtPresnap(a, b, 120000, true);
       const offBefore = await handoffCount(off);
       const defBefore = await handoffCount(def);
       const id = await off.page.evaluate(() => (window as any).__borg.sim.desc.id);
@@ -141,7 +143,7 @@ test('an interception then a fumble back: two handoffs on one play', async ({ ba
 test('turnover with the watcher offline: the auto-runner finishes, and the match waits for them', async ({ baseURL }) => {
   const { a, b } = await ready(baseURL);
   try {
-    const { off, def } = await offenseAtPresnap(a, b);
+    const { off, def } = await offenseAtPresnap(a, b, 120000, true);
     await forcePick(off, 0.8);
     await pocket(off);
     def.proxy.block(true);
@@ -164,7 +166,7 @@ test('turnover with the watcher offline: the auto-runner finishes, and the match
 test('turnover with the watcher\'s page hidden: the auto-runner finishes', async ({ baseURL }) => {
   const { a, b } = await ready(baseURL);
   try {
-    const { off, def } = await offenseAtPresnap(a, b);
+    const { off, def } = await offenseAtPresnap(a, b, 120000, true);
     await forcePick(off, 0.8);
     await pocket(off);
     await def.page.evaluate(() => (window as any).__room.net.send({ t: 'visibility', visible: false }));
@@ -216,7 +218,7 @@ test('a dropped controller is voided before a handoff, and the turnover stands a
     await def.page.waitForFunction(() => (window as any).__borg.waiting === false, undefined, { timeout: 20000 });
 
     // After a handoff: the new controller vanishes, and the ball stays with them at the handoff spot.
-    ({ off, def } = await offenseAtPresnap(a, b));
+    ({ off, def } = await offenseAtPresnap(a, b, 120000, true));
     const offSeat = (await snap(off.page)).seat;
     const handBefore = await handoffCount(def);
     await forcePick(off);

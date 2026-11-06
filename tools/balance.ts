@@ -2,8 +2,8 @@
 import { DEFAULT_CONFIG, DIFFICULTY, type Difficulty, type MatchConfig } from '../src/shared/data/config';
 import { TEAMS } from '../src/shared/data/teams';
 import { botChoice } from '../src/shared/rules/coach';
-import { advanceBanner, afterCoinToss, applyChoice, applyResult, applySnap, createMatch, simContext, type MatchState } from '../src/shared/rules/match';
-import { pickPlay } from '../src/shared/data/playbook';
+import { advanceBanner, afterCoinToss, applyCall, applyChoice, applyResult, applySnap, createMatch, huddleTimeout, simContext, type MatchState } from '../src/shared/rules/match';
+import { botCall, coachDefense, coachOffense, type Situation } from '../src/shared/rules/playcall';
 import { buildRoster } from '../src/shared/data/roster';
 import { botInputs, newBot } from '../src/shared/sim/bot';
 import { acceptHandoff } from '../src/shared/sim/contact';
@@ -21,7 +21,8 @@ function cfg(d: Difficulty): SimCfg {
   return { difficulty: d, sackTime: v.sackTime, coverLag: v.coverLag, intRadius: v.intRadius, weather: 'clear', fumbleMult: 1, bullet: true, trucking: true, fatigue: true, injuries: false, penalties: true, liveReturns: true };
 }
 
-export function runPlays(n: number, offScore: number, defScore: number, difficulty: Difficulty = 'normal', seed = 1): PlayAgg {
+/** Plays from scrimmage with the coach's calls on both sides, or pinned ones. */
+export function runPlays(n: number, offScore: number, defScore: number, difficulty: Difficulty = 'normal', seed = 1, pin: { play?: number; defense?: number } = {}): PlayAgg {
   const rosters: SimTeams['rosters'] = [buildRoster('AAA', offScore, offScore), buildRoster('BBB', defScore, defScore)];
   const teams: SimTeams = { rosters, cond: [rosters[0].map(() => 1), rosters[1].map(() => 1)], armFatigue: [0, 0] };
   const a = agg();
@@ -30,8 +31,12 @@ export function runPlays(n: number, offScore: number, defScore: number, difficul
   for (let i = 0; i < n; i++) {
     const s0 = mixSeed(seed, i);
     const toGo = 10;
-    const play = pickPlay(((s0 >>> 8) % 1000) / 1000, 1 + (i % 3), toGo);
-    const desc: PlayDesc = { id: i + 1, type: 'scrimmage', seed: s0, offense: 0 as Seat, dir: 1, los: 30 + (i % 40), down: 1 + (i % 3), toGo, playbook: play.id, clock: 180 };
+    const los = 30 + (i % 40);
+    const down = 1 + (i % 3);
+    const sit: Situation = { down, toGo, toGoal: 110 - los, clock: 180, period: 1, lead: 0, hurry: false, twoPoint: false, recent: [] };
+    const playbook = pin.play ?? coachOffense(sit, mixSeed(s0, 5));
+    const defense = pin.defense ?? coachDefense(sit, mixSeed(s0, 7), 2.2);
+    const desc: PlayDesc = { id: i + 1, type: 'scrimmage', seed: s0, offense: 0 as Seat, dir: 1, los, down, toGo, playbook, defense, clock: 180 };
     const s: SimState = createPlay(desc, teams, c);
     let guard = 0;
     while (!s.finished && guard++ < 3000) {
@@ -73,6 +78,7 @@ export function playGame(teams: [string, string], over: Partial<MatchConfig>, se
     switch (m.phase) {
       case 'coinToss': m = afterCoinToss(m); break;
       case 'banner': case 'replay': m = advanceBanner(m); break;
+      case 'huddle': m = huddleCalls(m, roll); break;
       case 'choice4th': case 'conversion': case 'kickChoice': m = applyChoice(m, botChoice(m, rndFrom(roll))!); break;
       case 'presnap': m = runPlay(m, bot, into); break;
       default: throw new Error(`stuck in ${m.phase}`);
@@ -93,6 +99,16 @@ export function playGame(teams: [string, string], over: Partial<MatchConfig>, se
     into.passYds += st.passYds; into.rushYds += st.rushYds; into.retYds += st.retYds;
   }
   return m;
+}
+
+/** Both sides call as the browser bot does: mostly the coach's pick, sometimes something else of the same kind. */
+function huddleCalls(m: MatchState, roll: { rng: number }): MatchState {
+  const h = m.huddle;
+  if (!h || !m.play) return huddleTimeout(m);
+  const off = m.play.offense;
+  let n = applyCall(m, off, 'off', botCall('off', h.suggest[0], rndFrom(roll)));
+  if (n.phase === 'huddle' && n.huddle && n.huddle.calls[1] < 0) n = applyCall(n, (1 - off) as Seat, 'def', botCall('def', h.suggest[1], rndFrom(roll)));
+  return n.phase === 'huddle' ? huddleTimeout(n) : n;
 }
 
 function rndFrom(r: { rng: number }): number {
@@ -141,6 +157,7 @@ export function matchup(off: number, def: number, games: number, over: Partial<M
       switch (m.phase) {
         case 'coinToss': m = afterCoinToss(m); break;
         case 'banner': case 'replay': m = advanceBanner(m); break;
+        case 'huddle': m = huddleCalls(m, roll); break;
         case 'choice4th': case 'conversion': case 'kickChoice': m = applyChoice(m, botChoice(m, rndFrom(roll))!); break;
         default: {
           const live = applySnap(m);

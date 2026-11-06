@@ -1,0 +1,81 @@
+/* The huddle's playbook, over the canvas. Sizes are in art pixels (--u), so it scales with the game. */
+.pb-layer { position:absolute; inset:0; pointer-events:none; font:400 calc(var(--u) * 8)/1.15 var(--font); --ink:#14202c; --sheet:#101a56; --well:#0a1140; --rule:#22338f; }
+.pb-layer button { font:inherit; text-shadow:none; padding:0; border-width:calc(var(--u) * 1); }
+
+.pb { position:absolute; left:calc(var(--u) * 8); right:calc(var(--u) * 8); top:calc(var(--u) * 72); bottom:calc(var(--u) * 28); display:flex; flex-direction:column; gap:calc(var(--u) * 4);
+  padding:calc(var(--u) * 5) calc(var(--u) * 6); background:var(--sheet); border:calc(var(--u) * 2) solid #fff; outline:calc(var(--u) * 1) solid #000; box-shadow:0 calc(var(--u) * 3) 0 #000;
+  pointer-events:auto; animation:pb-in 180ms steps(3) both; }
+.pb.pb-break { animation:pb-out 420ms steps(5) both; pointer-events:none; }
+.pb.pb-still { animation:none; }
+@keyframes pb-in { from { transform:translateY(calc(var(--u) * 16)); opacity:0; } }
+@keyframes pb-out { 30% { transform:translateY(calc(var(--u) * -4)); opacity:1; } to { transform:translateY(calc(var(--u) * 40)); opacity:0; } }
+
+.pb-head { display:flex; align-items:center; gap:calc(var(--u) * 8); height:calc(var(--u) * 16); white-space:nowrap; }
+.pb-team { padding:calc(var(--u) * 2) calc(var(--u) * 5); border-bottom:calc(var(--u) * 2) solid; }
+.pb-sit { color:var(--accent); }
+.pb-spacer { flex:1 1 auto; }
+.pb-last { color:var(--dim); overflow:hidden; text-overflow:clip; }
+.pb-key { flex:none; align-self:center; color:var(--ink); background:var(--dim); padding:calc(var(--u) * 1) calc(var(--u) * 2); }
+.pb-digits { min-width:calc(var(--u) * 16); text-align:right; font-weight:400; font-size:calc(var(--u) * 16); color:var(--accent); }
+.pb-digits.hot { color:var(--bad); animation:pb-blink 500ms steps(1) infinite; }
+@keyframes pb-blink { 50% { color:#fff; } }
+
+.pb-bar { height:calc(var(--u) * 4); background:#000; flex:none; }
+.pb-bar i { display:block; height:100%; width:100%; background:var(--accent); }
+.pb-bar i.hot { background:var(--bad); }
+
+.pb-body { flex:1 1 0; min-height:0; display:flex; gap:calc(var(--u) * 6); }
+.pb-right { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:calc(var(--u) * 4); }
+
+.pb-art { display:block; image-rendering:pixelated; border:calc(var(--u) * 1) solid #000; }
+.pb-name { font-weight:400; color:#fff; white-space:nowrap; overflow:hidden; }
+.pb-sub { color:var(--dim); white-space:nowrap; overflow:hidden; }
+.pb-chip { align-self:flex-start; background:var(--accent); color:var(--ink); padding:calc(var(--u) * 1) calc(var(--u) * 4); }
+
+/* The coach's pick: the big gold button on the left. */
+.pb-layer .pb-coach { flex:none; width:calc(var(--u) * 166); display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--u) * 3); padding:calc(var(--u) * 4); text-align:left;
+  background:#16236e; border:calc(var(--u) * 2) solid var(--accent); box-shadow:0 calc(var(--u) * 2) 0 #000; }
+.pb-coach .pb-art { width:calc(var(--u) * 152); height:calc(var(--u) * 88); }
+.pb-coach .pb-name { font-size:calc(var(--u) * 16); color:var(--accent); max-width:100%; }
+.pb-coach .pb-name.long { font-size:calc(var(--u) * 8); padding:calc(var(--u) * 4) 0; }
+.pb-coach .pb-tip { color:#fff; white-space:normal; }
+.pb-coach .pb-go { margin-top:auto; align-self:stretch; text-align:center; background:var(--accent); color:var(--ink); padding:calc(var(--u) * 2) 0; }
+.pb-layer .pb-coach:hover:not(:disabled) { background:#22338f; }
+
+.pb-tabs { display:flex; gap:calc(var(--u) * 3); height:calc(var(--u) * 16); flex:none; }
+.pb-layer .pb-tab { flex:1 1 0; background:var(--well); border-color:#000; color:var(--dim); box-shadow:none; }
+.pb-layer .pb-tab:hover:not(:disabled) { background:var(--rule); color:#fff; }
+.pb-layer .pb-tab.on, .pb-layer .pb-tab.on:hover:not(:disabled) { background:#fff; color:var(--ink); }
+
+.pb-grid { flex:1 1 0; min-height:0; display:grid; grid-template-columns:repeat(3, calc(var(--u) * 142)); gap:calc(var(--u) * 4); }
+.pb-grid-off { grid-template-rows:repeat(2, 1fr); }
+.pb-grid-def { grid-template-rows:1fr; }
+.pb-layer .pb-card { position:relative; display:flex; flex-direction:column; align-items:flex-start; gap:calc(var(--u) * 2); padding:calc(var(--u) * 2) calc(var(--u) * 2); text-align:left; min-width:0;
+  background:var(--well); border-color:#000; box-shadow:none; }
+.pb-card .pb-art { width:calc(var(--u) * 136); height:calc(var(--u) * 64); }
+.pb-grid-def .pb-card .pb-art { height:calc(var(--u) * 140); }
+.pb-shell { color:var(--accent); white-space:nowrap; }
+.pb-grid-def .pb-card .pb-sub { white-space:normal; }
+.pb-row { display:flex; gap:calc(var(--u) * 4); align-items:center; max-width:100%; }
+.pb-row em { font-style:normal; color:var(--ink); background:var(--dim); padding:0 calc(var(--u) * 2); }
+.pb-layer .pb-card:hover:not(:disabled) { background:var(--rule); }
+.pb-layer .pb-card:hover:not(:disabled) .pb-art { border-color:#fff; }
+.pb-card.pb-pick { outline:calc(var(--u) * 1) solid var(--accent); outline-offset:calc(var(--u) * -1); }
+.pb-card.pb-pick::after { content:'COACH'; position:absolute; right:calc(var(--u) * 4); top:calc(var(--u) * 4); background:var(--accent); color:var(--ink); padding:0 calc(var(--u) * 2); }
+.pb-layer button:disabled { opacity:1; cursor:default; }
+.pb-layer .pb-chosen, .pb-layer .pb-chosen:disabled { background:var(--accent); animation:pb-flash 300ms steps(2) 2; }
+.pb-chosen .pb-name, .pb-chosen .pb-sub, .pb-chosen .pb-tip { color:var(--ink); }
+@keyframes pb-flash { 50% { background:#fff; } }
+
+/* Locked in, waiting for the other side. */
+.pb-locked { flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:calc(var(--u) * 14); }
+.pb-locked .pb-art { width:calc(var(--u) * 152); height:calc(var(--u) * 88); }
+.pb-locked-text { display:flex; flex-direction:column; gap:calc(var(--u) * 4); }
+.pb-locked .pb-name { font-size:calc(var(--u) * 16); color:var(--accent); }
+.pb-wait { color:var(--dim); animation:pb-blink-dim 1s steps(1) infinite; }
+@keyframes pb-blink-dim { 50% { color:#fff; } }
+
+/* Someone else is calling: a slim strip under the score. */
+.pb-watch { position:absolute; left:50%; top:calc(var(--u) * 74); transform:translateX(-50%); display:grid; grid-template-columns:auto auto; align-items:center; gap:calc(var(--u) * 3) calc(var(--u) * 10);
+  padding:calc(var(--u) * 4) calc(var(--u) * 8); background:#000; border:calc(var(--u) * 1) solid #fff; white-space:nowrap; }
+.pb-watch .pb-bar { grid-column:1 / -1; }

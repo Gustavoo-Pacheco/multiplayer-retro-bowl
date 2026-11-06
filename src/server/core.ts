@@ -4,8 +4,8 @@ import { DEFAULT_CONFIG, isValidConfigPatch, type MatchConfig } from '../shared/
 import { TEAM_BY_ID } from '../shared/data/teams';
 import type { ClientMsg, ErrorCode, RoomView, Seat, ServerMsg } from '../shared/protocol';
 import {
-  advanceBanner, afterCoinToss, applyAudible, applyChoice, applyResult, applySnap, applyTimeout, canAudible, canTimeout, concede, createMatch, currentController,
-  defaultChoice, isChoiceLegal, isResultValid, nextController, presentResult, voidPlay, type MatchState,
+  advanceBanner, afterCoinToss, applyCall, applyChoice, applyResult, applySnap, applyTimeout, canCall, canTimeout, concede, createMatch, currentController,
+  defaultChoice, huddleTimeout, isChoiceLegal, isResultValid, nextController, presentResult, viewFor, voidPlay, type MatchState,
 } from '../shared/rules/match';
 import { emptyStats, type PlayEnd, type PlayResult } from '../shared/sim/state';
 import { T } from '../shared/sim/tuning';
@@ -30,6 +30,8 @@ export interface RoomHost {
   token(): string;
   /** Debug tools are only available when this is set. */
   devTools: boolean;
+  /** One screen for both players: the defense gets its own full huddle time once the offense has called. */
+  sharedScreen?: boolean;
   restart?(): void;
 }
 
@@ -59,7 +61,7 @@ export interface RoomData {
 
 const SEATS: Seat[] = [0, 1];
 const other = (s: Seat): Seat => (1 - s) as Seat;
-const CHOICE_PHASES = new Set(['presnap', 'choice4th', 'conversion', 'kickChoice']);
+const CHOICE_PHASES = new Set(['huddle', 'presnap', 'choice4th', 'conversion', 'kickChoice']);
 
 export class RoomCore {
   data: RoomData | null = null;
@@ -156,10 +158,21 @@ export class RoomCore {
     return d.dl.playClock === null ? null : Math.max(0, d.dl.playClock - this.host.now());
   }
 
-  private matchMsg(): ServerMsg {
+  /** The match as one seat may see it: in the huddle, the other side's call stays hidden. */
+  private matchMsg(seat: Seat | null): ServerMsg {
     const d = this.data!;
     const bannerMs = d.dl.banner === null ? null : Math.max(0, d.dl.banner - this.host.now());
-    return { t: 'matchState', match: d.match!, pc: this.pcLeft(), live: d.live ? { playId: d.live.playId, controller: d.live.controller } : null, bannerMs };
+    return { t: 'matchState', match: viewFor(d.match!, this.host.sharedScreen ? 'shared' : seat), pc: this.pcLeft(), live: d.live ? { playId: d.live.playId, controller: d.live.controller } : null, bannerMs };
+  }
+
+  private sendMatch(): void {
+    const byseat = new Map<Seat, string>();
+    for (const c of this.host.conns()) {
+      if (c.seat === null) continue;
+      let msg = byseat.get(c.seat);
+      if (!msg) { msg = JSON.stringify(this.matchMsg(c.seat)); byseat.set(c.seat, msg); }
+      c.send(msg);
+    }
   }
 
   private waitingMsg(): ServerMsg {
@@ -226,7 +239,7 @@ export class RoomCore {
     if (m.phase === 'final') { d.waiting = false; d.canClaim = null; d.dl.reconnect = [null, null]; }
     else if (CHOICE_PHASES.has(m.phase) && !(this.present(0) && this.present(1))) {
       d.waiting = true;
-      this.broadcast(this.matchMsg());
+      this.sendMatch();
       this.broadcast(this.waitingMsg());
       this.persist();
       return;
@@ -241,13 +254,14 @@ export class RoomCore {
         break;
       }
       case 'replay': d.dl.banner = this.host.now() + t.replay; break;
+      case 'huddle': d.dl.playClock = this.host.now() + t.huddle; break;
       case 'presnap': case 'choice4th': case 'conversion': case 'kickChoice':
         d.dl.playClock = this.host.now() + m.config.playClock * 1000;
         break;
       default: break;
     }
     if (m.phase === 'presnap' && m.play) this.broadcast({ t: 'playStart', play: m.play, match: m, pc: this.pcLeft() });
-    else this.broadcast(this.matchMsg());
+    else this.sendMatch();
     this.broadcast(this.waitingMsg());
     this.persist();
   }
@@ -274,6 +288,7 @@ export class RoomCore {
     const m = d.match;
     if (!m) return;
     if (m.phase === 'presnap') { this.beginLive(true, null); return; }
+    if (m.phase === 'huddle') { d.match = huddleTimeout(m); this.enterState(); return; }
     if (isChoiceLegal(m, defaultChoice(m))) { d.match = applyChoice(m, defaultChoice(m)); this.enterState(); }
   }
 
@@ -321,7 +336,7 @@ export class RoomCore {
     d.dl.playClock = null;
     d.dl.pause = this.host.now() + T.timers.pause;
     this.broadcast({ t: 'paused', by: seat, left: T.timers.pause });
-    this.broadcast(this.matchMsg());
+    this.sendMatch();
     this.persist();
   }
 
@@ -379,6 +394,7 @@ export class RoomCore {
       case 'skip':
         if (match.phase === 'replay' && nextController(match) === seat) this.bannerDone();
         return;
+      case 'call': this.onCall(conn, seat, m); return;
       default: break;
     }
     // Gameplay messages: offense only, in the right phase, for the current play.
@@ -389,15 +405,6 @@ export class RoomCore {
       case 'snap':
         if (match.phase !== 'presnap' || match.play?.id !== m.playId) { this.err(conn, 'phase'); return; }
         this.beginLive(false, seat);
-        return;
-      case 'audible':
-        if (!canAudible(match, seat) || match.play?.id !== m.playId) { this.err(conn, 'phase'); return; }
-        d.match = applyAudible(match, seat);
-        {
-          const pc = this.pcLeft();
-          this.broadcast({ t: 'playStart', play: d.match.play!, match: d.match, pc });
-          this.persist();
-        }
         return;
       case 'timeout':
         if (!canTimeout(match, seat)) { this.err(conn, 'phase'); return; }
@@ -413,6 +420,21 @@ export class RoomCore {
       case 'playResult': this.onResult(conn, m.result); return;
       default: this.err(conn, 'badmsg');
     }
+  }
+
+  /** A play call from either side. The huddle breaks as soon as both are in. */
+  private onCall(conn: Conn, seat: Seat, m: Extract<ClientMsg, { t: 'call' }>): void {
+    const d = this.data!;
+    const match = d.match!;
+    if (d.pausedBy !== null || d.waiting) { this.err(conn, 'phase'); return; }
+    if (match.phase !== 'huddle' || match.play?.id !== m.playId) { this.err(conn, 'phase'); return; }
+    if (!canCall(match, seat, m.side, m.id)) { this.err(conn, 'forbidden', 'not your call'); return; }
+    d.match = applyCall(match, seat, m.side, m.id);
+    if (d.match.phase !== 'huddle') { this.enterState(); return; }
+    // On one screen, the second caller gets a full huddle of their own.
+    if (this.host.sharedScreen) d.dl.playClock = this.host.now() + T.timers.huddle;
+    this.sendMatch();
+    this.persist();
   }
 
   private withinRate(conn: Conn): boolean {
@@ -585,7 +607,7 @@ export class RoomCore {
       // Catch up: enterState above may already have told them, but a rejoin mid-state needs a copy.
       const m2 = d.match;
       if (m2.phase === 'presnap' && m2.play && !d.waiting) this.sendTo(conn, { t: 'playStart', play: m2.play, match: m2, pc: this.pcLeft() });
-      else this.sendTo(conn, this.matchMsg());
+      else this.sendTo(conn, this.matchMsg(seat));
       this.sendTo(conn, this.waitingMsg());
       if (d.pausedBy !== null) this.sendTo(conn, { t: 'paused', by: d.pausedBy, left: Math.max(0, (d.dl.pause ?? 0) - this.host.now()) });
     }

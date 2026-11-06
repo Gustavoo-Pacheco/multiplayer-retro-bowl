@@ -14,6 +14,7 @@ class LocalConn implements Conn {
 export class LocalNet implements NetLike, RoomHost {
   status: NetStatus = 'open';
   devTools = true;
+  sharedScreen = true;
   private c0: LocalConn;
   private c1: LocalConn;
   private core: RoomCore;
@@ -54,7 +55,14 @@ export class LocalNet implements NetLike, RoomHost {
     return m?.possession === 1 ? this.c1 : this.c0;
   }
 
-  send(m: ClientMsg): void { this.core.onMessage(m.t === 'pause' ? this.c0 : this.controllerConn(), JSON.stringify(m)); }
+  send(m: ClientMsg): void { this.core.onMessage(m.t === 'pause' ? this.c0 : m.t === 'call' ? this.callerConn(m.side) : this.controllerConn(), JSON.stringify(m)); }
+
+  /** A play call speaks for whichever team that side is. */
+  private callerConn(side: 'off' | 'def'): LocalConn {
+    const off = this.core.data?.match?.play?.offense ?? 0;
+    const seat = side === 'off' ? off : 1 - off;
+    return seat === 0 ? this.c0 : this.c1;
+  }
   sendFrame(b: ArrayBuffer): void { this.core.onMessage(this.controllerConn(), b); }
 
   // RoomHost

@@ -64,6 +64,21 @@ export async function kickoffTouchback(kicker: TestClient, k: MatchState): Promi
   });
 }
 
+/** Runs from the coin toss through the opening kick to the first huddle. Turn autoCall off first to stay in it. */
+export async function toHuddle(p: Pair): Promise<{ huddle: MatchState; offView: MatchState; defView: MatchState; off: TestClient; def: TestClient; offSeat: Seat }> {
+  expire(p.a, 'banner');
+  const first = await waitState(p.a, (m) => m.phase === 'kickChoice');
+  const kicker = first.kicker === 0 ? p.a : p.b;
+  kicker.send({ t: 'choice', c: 'deep' });
+  const k = await waitState(p.a, (m) => m.phase === 'presnap' && m.play?.type === 'kickoff');
+  await kickoffTouchback(kicker, k);
+  const h = await waitState(p.a, (m) => m.phase === 'huddle');
+  const hb = await waitState(p.b, (m) => m.phase === 'huddle');
+  const offSeat = h.play!.offense;
+  const [offView, defView] = offSeat === 0 ? [h, hb] : [hb, h];
+  return { huddle: h, offView, defView, offSeat, off: offSeat === 0 ? p.a : p.b, def: offSeat === 0 ? p.b : p.a };
+}
+
 /** Runs from the coin toss through any automatic kicks to the first play from scrimmage. */
 export async function toScrimmage(p: Pair): Promise<{ match: MatchState; off: TestClient; def: TestClient; offSeat: Seat }> {
   expire(p.a, 'banner');

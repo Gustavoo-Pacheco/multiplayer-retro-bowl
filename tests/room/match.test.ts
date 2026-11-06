@@ -94,7 +94,7 @@ describe('permissions', () => {
     const id = match.play!.id;
     clearInbox(off, def);
     for (const m of [
-      { t: 'snap', playId: id }, { t: 'audible', playId: id }, { t: 'timeout' }, { t: 'choice', c: 'go' },
+      { t: 'snap', playId: id }, { t: 'timeout' }, { t: 'choice', c: 'go' },
       { t: 'playResult', result: result(match) },
     ] as const) {
       def.send(m);
@@ -287,7 +287,8 @@ describe('disconnects', () => {
     await def.wait('snap');
     clearInbox(def);
     off.close();
-    const m2 = await waitState(def, (m) => m.phase === 'presnap', 9000);
+    // The down is replayed from a fresh huddle.
+    const m2 = await waitState(def, (m) => m.phase === 'huddle' || m.phase === 'presnap', 9000);
     expect(m2.down).toBe(match.down);
     expect(m2.clock).toBe(match.clock);
     expect(m2.ballX).toBe(match.ballX);
@@ -337,7 +338,7 @@ describe('disconnects', () => {
       clearInbox(off);
       off.send({ t: 'playResult', result: result(match, { possessor: (1 - (off.seat as number)) as Seat, spotX: 60 }) });
       await off.wait('waiting', (m) => m.on);
-      const st = await waitState(off, (m) => m.phase === 'presnap' || m.phase === 'banner');
+      const st = await waitState(off, (m) => m.phase === 'huddle' || m.phase === 'presnap' || m.phase === 'banner');
       expect(st.possession).toBe(1 - (off.seat as number));
     }
   });
@@ -354,7 +355,7 @@ describe('disconnects', () => {
     clearInbox(off);
     // The new controller vanishes without sending a frame.
     def.close();
-    const m2 = await waitState(off, (m) => m.phase === 'presnap' || m.phase === 'banner', 9000);
+    const m2 = await waitState(off, (m) => m.phase === 'huddle' || m.phase === 'presnap' || m.phase === 'banner', 9000);
     expect(m2.possession).toBe(def.seat);
     expect(m2.ballX).toBe(62);
     expect(m2.down).toBe(1);

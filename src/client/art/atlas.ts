@@ -4,6 +4,9 @@ import { ART_SCALE, CELL_H, CELL_W, CELLS, cellIndex, composedCells } from './co
 import { paletteFor, SKINS, type Kit } from './palette';
 
 const COLS = 20;
+// The atlas keeps one pixel per art pixel, and draw() scales it up by a whole number of canvas pixels.
+const ART_W = CELL_W / ART_SCALE;
+const ART_H = CELL_H / ART_SCALE;
 
 export class Atlas {
   canvas: HTMLCanvasElement;
@@ -11,8 +14,8 @@ export class Atlas {
     const cells = composedCells();
     const rows = Math.ceil(cells.length / COLS);
     const c = document.createElement('canvas');
-    c.width = COLS * CELL_W;
-    c.height = rows * CELL_H;
+    c.width = COLS * ART_W;
+    c.height = rows * ART_H;
     const g = c.getContext('2d')!;
     const img = g.createImageData(c.width, c.height);
     const data = new Uint32Array(img.data.buffer);
@@ -24,33 +27,41 @@ export class Atlas {
       pal.set(k, (255 << 24) | (b << 16) | (gr << 8) | r);
     }
     cells.forEach((cell, i) => {
-      const ox = (i % COLS) * CELL_W;
-      const oy = Math.floor(i / COLS) * CELL_H;
-      cell.rows.forEach((row, y) => {
-        for (let x = 0; x < CELL_W; x++) {
-          const ch = row[x];
+      const ox = (i % COLS) * ART_W;
+      const oy = Math.floor(i / COLS) * ART_H;
+      for (let y = 0; y < ART_H; y++) {
+        const row = cell.rows[y * ART_SCALE];
+        for (let x = 0; x < ART_W; x++) {
+          const ch = row[x * ART_SCALE];
           if (ch !== '.') data[(oy + y) * c.width + ox + x] = pal.get(ch) ?? 0xffff00ff;
         }
-      });
+      }
     });
     g.putImageData(img, 0, 0);
     this.canvas = c;
   }
 
-  /** Draws one frame with its feet at (x, y). */
-  draw(ctx: CanvasRenderingContext2D, build: BuildName, name: string, frame: number, x: number, y: number, face: number): void {
+  /**
+   * Draws one frame with its feet at (x, y). At scale 1 an art pixel is ART_SCALE pixels of the
+   * target; a smaller scale needs a target with enough pixels to keep that a whole number.
+   */
+  draw(ctx: CanvasRenderingContext2D, build: BuildName, name: string, frame: number, x: number, y: number, face: number, scale = 1): void {
     const i = cellIndex(build, name, frame);
-    const sx = (i % COLS) * CELL_W;
-    const sy = Math.floor(i / COLS) * CELL_H;
-    // Snapping to even pixels keeps figures on the same chunky grid as the field.
-    const dx = Math.round(x / ART_SCALE) * ART_SCALE - CELL_W / 2;
-    const dy = Math.round(y / ART_SCALE) * ART_SCALE - CELL_H + ART_SCALE;
-    if (face >= 0) ctx.drawImage(this.canvas, sx, sy, CELL_W, CELL_H, dx, dy, CELL_W, CELL_H);
+    const sx = (i % COLS) * ART_W;
+    const sy = Math.floor(i / COLS) * ART_H;
+    const u = ART_SCALE * scale;
+    const w = ART_W * u;
+    const h = ART_H * u;
+    // Snapping to the art grid keeps figures as chunky as they are drawn.
+    const dx = Math.round(x / u) * u - w / 2;
+    const dy = Math.round(y / u) * u - h + u;
+    ctx.imageSmoothingEnabled = false;
+    if (face >= 0) ctx.drawImage(this.canvas, sx, sy, ART_W, ART_H, dx, dy, w, h);
     else {
       ctx.save();
-      ctx.translate(dx + CELL_W, dy);
+      ctx.translate(dx + w, dy);
       ctx.scale(-1, 1);
-      ctx.drawImage(this.canvas, sx, sy, CELL_W, CELL_H, 0, 0, CELL_W, CELL_H);
+      ctx.drawImage(this.canvas, sx, sy, ART_W, ART_H, 0, 0, w, h);
       ctx.restore();
     }
   }

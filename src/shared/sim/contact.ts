@@ -2,6 +2,7 @@
 import { rnd, rndRange } from './rng';
 import { T } from './tuning';
 import { A, dirOf, EV, inOppEndZone, inOwnEndZone, type Seat, type SimPlayer, type SimState } from './state';
+import { PLAYBOOK } from '../data/playbook';
 import { endPlay } from './end';
 import { addTouch, beginRun } from './run';
 import { moveTo, stopMoving } from './ai/move';
@@ -56,7 +57,9 @@ export function checkContact(s: SimState, dt: number): boolean {
     const from = hitAngle(r, d, dirSign);
     const stiff = s.g.stiffT > 0;
     const truck = s.g.truck && s.cfg.trucking;
-    const p = tackleChance(d.tck, r.str, from, stiff, truck);
+    // A sneak: the line and the QB surge forward for a moment, and he falls ahead for the yard.
+    const surge = s.phase === 'run' && r.i === 0 && s.phaseT < T.run.sneakSurge && PLAYBOOK[s.desc.playbook]?.kind === 'sneak' && (s.desc.type === 'scrimmage' || s.desc.type === 'twoPoint');
+    const p = Math.max(T.chance.min, tackleChance(d.tck, r.str, from, stiff, truck) - (surge ? T.run.sneakHold : 0));
     s.ev |= EV.grunt;
     const forcedSack = s.force === 'sack' && s.phase === 'pocket';
     if (rnd(s) < p || forcedSack) {
@@ -66,7 +69,7 @@ export function checkContact(s: SimState, dt: number): boolean {
       if (s.force === 'fumble' || (!forcedSack && rnd(s) < fChance)) { fumble(s, r, d); return true; }
       const n = dist || 1;
       const ux = (r.x - d.x) / n;
-      const fall = from === 'behind' ? T.contact.fallForward * dirSign : ux * T.contact.knockback;
+      const fall = surge ? T.run.sneakFall * dirSign : from === 'behind' ? T.contact.fallForward * dirSign : ux * T.contact.knockback;
       // Backward contact: the spot is wherever the runner ends up.
       r.x = Math.max(0, Math.min(T.field.len, r.x + fall));
       d.anim = A.tackle;

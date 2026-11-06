@@ -1,5 +1,6 @@
 // Slingshot aiming, ball flight and the catch check.
 import { DIFFICULTY } from '../data/config';
+import { isRunKind, PLAYBOOK } from '../data/playbook';
 import { rnd } from './rng';
 import { clampChance, takeBall } from './contact';
 import { endPlay } from './end';
@@ -34,6 +35,8 @@ export function aimFadeAlpha(s: SimState, full: boolean): number {
 
 export function startAim(s: SimState): void {
   if (s.phase !== 'pocket' || s.aim.on || s.ball.holder !== 0) return;
+  // A designed run has no pass.
+  if (isRunKind(PLAYBOOK[s.desc.playbook]?.kind ?? 'pass') && s.mesh && !s.mesh.done) return;
   s.aim.on = true;
   s.aim.heldFrom = s.t;
   s.aim.dx = 0;
@@ -69,7 +72,7 @@ export function launch(s: SimState, dx: number, dy: number, bullet: boolean): vo
   b.holder = -1;
   b.sx = qb.x; b.sy = qb.y; b.ex = ex; b.ey = ey; b.t = 0; b.dur = len / speed;
   b.startZ = P.throwHeight; b.endZ = P.catchHeight;
-  b.peak = Math.max(P.minPeak, len * (bullet ? P.bulletArcPerYard : P.arcPerYard));
+  b.peak = passPeak(len, bullet, b.sy, b.ey);
   s.pass = { bullet, target: nearestReceiver(s, ex, ey), piFlag: false, piSpotX: 0, piChecked: false, distance: len, thrownFromX: qb.x };
   s.stats[qb.seat].att += 1;
   const fatigue = P.armFatigueHi - ((P.armFatigueHi - P.armFatigueLo) * (qb.sta - 1)) / 9;
@@ -78,6 +81,35 @@ export function launch(s: SimState, dx: number, dy: number, bullet: boolean): vo
   s.phase = 'flight';
   s.phaseT = 0;
   s.ev |= EV.throw;
+}
+
+/**
+ * How far a pass rises above the straight line from hand to hands. Short throws stay flat,
+ * and past arcFrom the arc grows faster than the distance, so a deep ball is a clear parabola.
+ * Bullets stay low. The height only changes how the throw looks: nothing in the sim reads it.
+ */
+export function passPeak(len: number, bullet: boolean, sy: number, ey: number): number {
+  const P = T.pass;
+  if (bullet) return Math.max(P.minPeak, len * P.bulletArcPerYard);
+  const peak = len * (P.arcPerYard + P.arcGrowth * Math.max(0, len - P.arcFrom));
+  return Math.max(P.minPeak, Math.min(peak, skyRoom(sy, ey)));
+}
+
+/** The highest peak that keeps the ball on screen all the way along a throw from sy to ey. */
+function skyRoom(sy: number, ey: number): number {
+  const P = T.pass;
+  const V = T.view;
+  const pxPerYard = V.fieldH / T.field.width;
+  // How high a ball over the far sideline can be and still be drawn below the top of the screen.
+  const above = (V.standsH + V.walkH + V.stripH - P.skyMargin) / pxPerYard;
+  let room = Infinity;
+  for (let n = 1; n < 20; n++) {
+    const k = n / 20;
+    const y = sy + (ey - sy) * k;
+    const line = P.throwHeight + (P.catchHeight - P.throwHeight) * k;
+    room = Math.min(room, (y + above - line) / (4 * k * (1 - k)));
+  }
+  return room;
 }
 
 function nearestReceiver(s: SimState, x: number, y: number): number {
@@ -138,7 +170,8 @@ export function resolvePass(s: SimState): void {
   if (inBounds && !pass.piFlag) {
     const nd = nearestDefender(s, b.x, b.y);
     if (nd.p && (nd.d <= s.cfg.intRadius || s.force === 'int')) {
-      if (s.force === 'int' || rnd(s) < interceptChance(nd.p.cat, nd.d)) {
+      const run = Math.min(1, Math.hypot(nd.p.vx, nd.p.vy) / Math.max(1, nd.p.top));
+      if (s.force === 'int' || rnd(s) < interceptChance(nd.p.cat, nd.d) * (1 - T.pass.pickOnTheRun * run)) {
         s.force = '';
         intercept(s, nd.p);
         return;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GestureRecognizer, type GestureContext } from '../../src/client/input/gestures';
 
-const ctx = (over: Partial<GestureContext> = {}): GestureContext => ({ phase: 'pocket', active: true, qb: { x: 100, y: 200 }, rb: { x: 80, y: 220 }, handoffOpen: true, ...over });
+const ctx = (over: Partial<GestureContext> = {}): GestureContext => ({ phase: 'pocket', active: true, qb: { x: 100, y: 200 }, ...over });
 
 function make(over: Partial<GestureContext> = {}): GestureRecognizer {
   const g = new GestureRecognizer();
@@ -20,12 +20,10 @@ describe('gestures', () => {
     g.down(1, 300, 200, 0);
     expect(g.drain()).toEqual([]);
   });
-  it('a quick still press on the RB is a handoff', () => {
-    const g = make();
+  it('a tap on the RB just starts the aim: the play call decides runs', () => {
+    const g = make({ qb: { x: 160, y: 200 } });
     g.down(1, 80, 208, 0);
-    expect(g.drain()).toEqual([]);
-    g.up(1, 80, 208, 100);
-    expect(g.drain()).toEqual([{ k: 'handoff' }]);
+    expect(g.drain()[0]).toEqual({ k: 'aimStart' });
   });
   it('a quick still press on the QB is a QB run', () => {
     const g = make();
@@ -33,17 +31,17 @@ describe('gestures', () => {
     g.up(1, 100, 188, 100);
     expect(g.drain()).toEqual([{ k: 'qbRun' }]);
   });
-  it('moving 8 px on the RB starts aiming instead', () => {
+  it('moving 8 px on the QB starts aiming instead', () => {
     const g = make();
-    g.down(1, 80, 208, 0);
-    g.move(1, 70, 208, 50);
+    g.down(1, 100, 188, 0);
+    g.move(1, 90, 188, 50);
     const out = g.drain();
     expect(out[0]).toEqual({ k: 'aimStart' });
     expect(out.at(-1)?.k).toBe('aim');
   });
-  it('holding the RB past 200 ms starts aiming instead', () => {
+  it('holding the QB past 200 ms starts aiming instead', () => {
     const g = make();
-    g.down(1, 80, 208, 0);
+    g.down(1, 100, 188, 0);
     g.tick(250);
     expect(g.drain()[0]).toEqual({ k: 'aimStart' });
   });

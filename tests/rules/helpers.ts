@@ -12,7 +12,7 @@ export function inPlay(over: Partial<MatchConfig> = {}, patch: Partial<MatchStat
   if (m.phase === 'kickChoice') m = applyChoice(m, 'deep');
   m = {
     ...m, possession: 0, attack: [1, -1], ballX: 50, down: 1, toGo: 10, phase: 'presnap', chosen4th: false, ...patch,
-    play: { id: 7, type: 'scrimmage', seed: 1, offense: patch.possession ?? 0, dir: 1, los: patch.ballX ?? 50, down: patch.down ?? 1, toGo: patch.toGo ?? 10, playbook: 1, clock: patch.clock ?? m.clock },
+    play: { id: 7, type: 'scrimmage', seed: 1, offense: patch.possession ?? 0, dir: 1, los: patch.ballX ?? 50, down: patch.down ?? 1, toGo: patch.toGo ?? 10, playbook: 6, defense: 0, clock: patch.clock ?? m.clock },
     playId: 7,
   };
   return m;

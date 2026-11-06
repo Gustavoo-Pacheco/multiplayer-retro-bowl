@@ -7,7 +7,18 @@ export type PlayType = 'scrimmage' | 'twoPoint' | 'kickoff' | 'freeKick' | 'onsi
 export const PHASES = ['pre', 'pocket', 'flight', 'run', 'loose', 'kickPower', 'kickAim', 'kickFlight', 'dead'] as const;
 export type SimPhase = (typeof PHASES)[number];
 
-export type Job = 'idle' | 'qb' | 'mesh' | 'route' | 'block' | 'rush' | 'cover' | 'deep' | 'zone' | 'pursue' | 'carry' | 'lead' | 'chase' | 'kickCover' | 'return' | 'kicker';
+export type Job =
+  | 'idle' | 'qb' | 'mesh' | 'route' | 'block' | 'rush' | 'cover' | 'deep' | 'zone' | 'pursue' | 'carry' | 'lead' | 'chase' | 'kickCover' | 'return' | 'kicker'
+  /** A pulling lineman or lead blocker on his way to the hole. */
+  | 'path'
+  /** A receiver blocking the defender over him. */
+  | 'stalk'
+  /** A lineman leaking out to block for a screen. */
+  | 'release'
+  /** A back carrying out a play-action fake. */
+  | 'fake'
+  /** A linebacker attacking the backfield. */
+  | 'crash';
 
 /** Animation IDs. Frames carry these as one byte; the art layer maps them to sprites. */
 export const A = {
@@ -76,9 +87,18 @@ export interface PlayDesc {
   los: number;
   down: number;
   toGo: number;
+  /** The offense's play, as an index into PLAYBOOK. */
   playbook: number;
+  /** The defense's call, as an index into DEF_CALLS. */
+  defense: number;
   clock: number;
 }
+
+/** The handoff or fake: the back's spot, the QB's spot beside it, the mesh point's index in the back's route, and the time it's due. */
+export interface MeshState { x: number; y: number; qx: number; qy: number; ri: number; due: number; done: boolean }
+
+/** A zone in field yards: the landmark, its lateral half-width and the depths downfield it covers. */
+export interface ZoneState { x: number; y: number; hw: number; d0: number; d1: number; deep: boolean }
 
 export interface SimPlayer {
   i: number; seat: Seat; role: Role; slot: number;
@@ -89,6 +109,9 @@ export interface SimPlayer {
   stun: number; tackleCd: number; ran: number; ax: number; ay: number;
   /** A defender who just shed a block can't be blocked again until this time. */
   freeUntil: number;
+  zone: ZoneState | null;
+  /** Seconds after the snap that a jammed receiver is slowed at the line. */
+  jam: number;
 }
 
 export interface BallState {
@@ -115,6 +138,8 @@ export interface Gestures {
   jukeT: number; jukeDir: number; lastJukeAt: number; jukeLoss: number;
   stiffT: number; stiffsLeft: number;
   diveT: number; diveGain: number;
+  /** A QB sneak dives over the pile when he reaches the end of his push. */
+  sneakPush: boolean;
   slowT: number; truck: boolean; truckMeter: number; hitSlowT: number;
   lastGestureAt: number; ballT: number;
 }
@@ -141,7 +166,9 @@ export interface SimState {
   pass: PassState | null;
   kick: KickState | null;
   g: Gestures;
-  defCall: 'man' | 'blitz' | 'soft';
+  defCall: number;
+  /** Where the QB and the back meet on a run or a fake, and when. */
+  mesh: MeshState | null;
   handoff: { to: Seat; reason: 'int' | 'fumble' | 'kick' | 'onside'; spotX: number } | null;
   frozen: boolean;
   autoRun: boolean;
@@ -167,7 +194,7 @@ export interface SimState {
 }
 
 export type SimInput =
-  | { k: 'snap' } | { k: 'handoff' } | { k: 'qbRun' }
+  | { k: 'snap' } | { k: 'qbRun' }
   | { k: 'aimStart' } | { k: 'aim'; dx: number; dy: number } | { k: 'bullet' } | { k: 'throw' } | { k: 'aimCancel' }
   | { k: 'swipe'; dx: number; dy: number } | { k: 'truck'; on: boolean }
   | { k: 'tap' };

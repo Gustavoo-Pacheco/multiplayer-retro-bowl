@@ -13,8 +13,12 @@ export function teams(a = 'SEA', b = 'LAR', offA = 80, defA = 80, offB = 80, def
   return { rosters, cond: [rosters[0].map(() => 1), rosters[1].map(() => 1)], armFatigue: [0, 0] };
 }
 
+/** Slants from the gun against Cover 1, the closest thing to the old single pass play against man coverage. */
+export const PASS_PLAY = 6;
+export const COVER_1 = 0;
+
 export function desc(over: Partial<PlayDesc> = {}): PlayDesc {
-  return { id: 1, type: 'scrimmage' as PlayType, seed: 42, offense: 0 as Seat, dir: 1, los: 40, down: 1, toGo: 10, playbook: 1, clock: 180, ...over };
+  return { id: 1, type: 'scrimmage' as PlayType, seed: 42, offense: 0 as Seat, dir: 1, los: 40, down: 1, toGo: 10, playbook: PASS_PLAY, defense: COVER_1, clock: 180, ...over };
 }
 
 export function play(over: Partial<PlayDesc> = {}, c: Partial<SimCfg> = {}, t: SimTeams = teams()): SimState {

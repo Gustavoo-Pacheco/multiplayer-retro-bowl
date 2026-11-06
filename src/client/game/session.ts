@@ -1,8 +1,10 @@
 // The match on this device: runs the sim when this player has the ball, plays frames otherwise.
 import { decodeFrame, encodeFrame, emptyFrame, frameFromSim, type Frame, type HandoffReason, type RoomView, type ServerMsg } from '../../shared/protocol';
+import { DEF_CALLS, PLAYBOOK, isRunKind } from '../../shared/data/playbook';
 import { TEAM_BY_ID } from '../../shared/data/teams';
 import { botChoice } from '../../shared/rules/coach';
-import { applySnap, effectiveRoster, nextController, simContext, type MatchState } from '../../shared/rules/match';
+import { botCall } from '../../shared/rules/playcall';
+import { applySnap, callerOf, effectiveRoster, nextController, simContext, type CallSide, type MatchState } from '../../shared/rules/match';
 import { hashStr } from '../../shared/sim/rng';
 import { botInputs, newBot, type BotState } from '../../shared/sim/bot';
 import { acceptHandoff, continueWithAutoRunner } from '../../shared/sim/contact';
@@ -21,14 +23,15 @@ import { ATLAS } from '../art/atlas';
 import { lum, teamKit, type Kit } from '../art/palette';
 import { drawField, buildField, type FieldArt } from '../render/field';
 import { drawStrip, drawText, textWidth } from '../render/font';
-import { drawHud } from '../render/hud';
+import { downText, drawHud, spotText } from '../render/hud';
 import { drawBanner, drawKickMeter, drawScoreboard, drawWeather } from '../render/overlays';
-import { drawScene, type SceneInfo } from '../render/scene';
+import { drawBallOverHud, drawScene, routeLines, type SceneInfo } from '../render/scene';
 import { Stage } from '../render/stage';
 import { Camera, screenX, screenY } from '../render/view';
 import { devTuningChanges, mountDevPanel, type DevPanel, type ForceKind } from '../ui/dev-panel';
 import { HudOverlay } from '../ui/hud';
 import { openHelp, openPrefs } from '../ui/panels';
+import { PlaybookPanel, type PlaybookView } from '../ui/playbook';
 import { applyFullscreen, prefs } from '../ui/prefs';
 import { Presentation } from './presentation';
 
@@ -53,9 +56,19 @@ function rosterArt(s: SimState, m: MatchState): Pick<SceneInfo, 'skins' | 'stars
   };
 }
 
+/** The bottom hint before the snap, which depends on the play that was called. */
+function snapHint(s: SimState): string {
+  if (s.desc.type !== 'scrimmage' && s.desc.type !== 'twoPoint') return 'TAP TO SNAP';
+  const kind = PLAYBOOK[s.desc.playbook]?.kind ?? 'pass';
+  if (kind === 'sneak') return 'TAP TO SNAP. THE QB PUSHES AHEAD';
+  if (isRunKind(kind)) return 'TAP TO SNAP. TAP THE QB TO KEEP IT';
+  return 'TAP TO SNAP. TAP THE QB TO RUN';
+}
+
 export class Session {
   stage: Stage;
   hud: HudOverlay;
+  playbook: PlaybookPanel;
   match: MatchState | null = null;
   room: RoomView | null = null;
   seat: Seat | null = null;
@@ -99,22 +112,29 @@ export class Session {
   private wakeLock: WakeLockSentinel | null = null;
   private devPanel: DevPanel | null = null;
   private armedForce: ForceKind | null = null;
+  /** The huddle view on screen, and when a bot makes its call for it. */
+  private huddleView: PlaybookView | null = null;
+  private botCallKey = '';
+  private botCallAt = 0;
+  private readonly keys = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   constructor(parent: HTMLElement, public net: NetLike, public opts: SessionOpts) {
     this.stage = new Stage(parent);
     this.bot = newBot(Math.floor(Math.random() * 1e9));
     this.hud = new HudOverlay(this.stage.overlay, {
-      audible: () => this.sendAudible(), timeout: () => this.sendTimeout(), pause: () => this.net.send({ t: 'pause' }),
+      timeout: () => this.sendTimeout(), pause: () => this.net.send({ t: 'pause' }),
       choice: (c) => this.net.send({ t: 'choice', c }), concede: () => this.net.send({ t: 'concede' }),
       claim: () => this.net.send({ t: 'claimWin' }), skip: () => this.net.send({ t: 'skip' }),
       settings: () => openPrefs(), help: () => openHelp(),
     });
+    this.playbook = new PlaybookPanel(this.stage.overlay, (side, id) => this.sendCall(side, id));
     this.unbind.push(bindPointer(this.stage, this.gestures));
     this.unbind.push(bindKeyboard({
       phase: () => (this.controlling() ? this.sim!.phase : null),
       forwardKey: () => (this.sim && dirOf(this.sim, this.sim.possessor) > 0 ? 'ArrowRight' : 'ArrowLeft'),
       input: (i) => { if (this.controlling()) this.queue.push(i); },
-      audible: () => this.sendAudible(), timeout: () => this.sendTimeout(), choice: (n) => this.hud.pressChoice(n), pause: () => this.net.send({ t: 'pause' }),
+      timeout: () => this.sendTimeout(), choice: (n) => this.hud.pressChoice(n), pause: () => this.net.send({ t: 'pause' }),
+      playbookKey: (e) => this.playbook.key(e),
     }));
     if (opts.dev) {
       this.devPanel = mountDevPanel(this.stage.overlay, {
@@ -153,6 +173,7 @@ export class Session {
     audio.setCrowd(false);
     for (const u of this.unbind) u();
     this.devPanel?.destroy();
+    this.playbook.destroy();
     this.hud.destroy();
     this.stage.destroy();
   }
@@ -220,7 +241,7 @@ export class Session {
     return this.seat === this.controllerOf(m);
   }
 
-  private sendAudible(): void { if (this.match?.play && this.isMyDecision()) this.net.send({ t: 'audible', playId: this.match.play.id }); }
+  private sendCall(side: CallSide, id: number): void { if (this.match?.play) this.net.send({ t: 'call', playId: this.match.play.id, side, id }); }
   private sendTimeout(): void { if (this.isMyDecision()) this.net.send({ t: 'timeout' }); }
 
   // --- Messages --------------------------------------------------------------
@@ -264,7 +285,7 @@ export class Session {
     const firstDown = desc.type === 'scrimmage' ? desc.los + desc.dir * desc.toGo : null;
     return {
       desc, seats: s.players.map((p) => p.seat), roles: s.players.map((p) => p.role), kits: kitsFor(m),
-      routes: s.players.filter((p) => p.route && (p.job === 'route' || p.job === 'mesh')).map((p) => ({ i: p.i, pts: p.route! })),
+      routes: routeLines(s),
       firstDownX: firstDown !== null && firstDown > 10 && firstDown < 110 ? firstDown : null,
       aimAlpha: aimFadeAlpha(s, m.config.aimCursor === 'full'), field: this.fieldFor(m),
       ...rosterArt(s, m),
@@ -399,11 +420,10 @@ export class Session {
 
   private syncGestures(): void {
     const s = this.sim;
-    if (!s || !this.controlling()) { this.gestures.ctx = { phase: 'dead', active: false, qb: null, rb: null, handoffOpen: false }; return; }
+    if (!s || !this.controlling()) { this.gestures.ctx = { phase: 'dead', active: false, qb: null }; return; }
     this.gestures.ctx = {
-      phase: s.phase, active: !s.frozen && !s.autoRun && !this.opts.bot, handoffOpen: s.phase === 'pocket' && s.phaseT <= T.pocket.handoffWindow,
+      phase: s.phase, active: !s.frozen && !s.autoRun && !this.opts.bot,
       qb: { x: screenX(s.players[0].x, this.cam.x), y: screenY(s.players[0].y) },
-      rb: { x: screenX(s.players[1].x, this.cam.x), y: screenY(s.players[1].y) },
     };
   }
 
@@ -502,6 +522,16 @@ export class Session {
       if ((this.opts.local || nextController(m) === this.seat) && now >= this.botChoiceAt) { this.botChoiceAt = now + 300; this.net.send({ t: 'skip' }); }
       return;
     }
+    if (m.phase === 'huddle') {
+      const v = this.huddleView;
+      // The bot waits for the panel to show this call, so a pick is never lost while the last call still flashes.
+      if (!v || v.mode !== 'call' || !this.playbook.showing(v.key)) return;
+      if (this.botCallKey !== v.key) { this.botCallKey = v.key; this.botCallAt = now + (500 + Math.random() * 1300) / this.opts.speed; return; }
+      if (now < this.botCallAt) return;
+      this.botCallAt = Infinity;
+      this.playbook.pick(botCall(v.side, v.suggest, Math.random()));
+      return;
+    }
     if (m.phase === 'choice4th' || m.phase === 'conversion' || m.phase === 'kickChoice') {
       if (!this.isMyDecision() || now < this.botChoiceAt) return;
       this.botChoiceAt = now + 300;
@@ -531,10 +561,14 @@ export class Session {
     drawWeather(ctx, m.weather, now);
     const live = this.sim && this.sim.phase !== 'pre' ? this.sim.clock : m.clock;
     const pc = this.playClockEnd === null ? null : Math.max(0, (this.playClockEnd - now) / 1000);
-    drawHud(ctx, m, this.hasFrame && this.frame.phase !== 'pre' && m.phase === 'live' ? this.frame.clock : live, pc, this.opts.local ? null : this.seat);
+    // The huddle has its own timer on the playbook.
+    drawHud(ctx, m, this.hasFrame && this.frame.phase !== 'pre' && m.phase === 'live' ? this.frame.clock : live, m.phase === 'huddle' ? null : pc, this.opts.local ? null : this.seat);
+    if (this.hasFrame && this.info) drawBallOverHud(ctx, f, this.cam.x);
     this.drawOverlays(ctx, m, now);
     if (replay) this.drawReplayFrame(ctx, now);
     this.pres.fx.drawScreen(ctx);
+    this.huddleView = this.viewHuddle(m, now);
+    this.playbook.show(this.huddleView, now);
     const acting = this.actingSeat();
     this.hud.update(m, acting, this.isMyDecision(), this.paused, this.waiting);
     this.hud.setSkip(m.phase === 'replay' && (this.opts.local || nextController(m) === this.seat));
@@ -551,7 +585,7 @@ export class Session {
   }
 
   private placeholderInfo(m: MatchState): SceneInfo {
-    const desc: PlayDesc = { id: 0, type: 'kickoff', seed: 0, offense: 0, dir: 1, los: m.ballX, down: 1, toGo: 10, playbook: 0, clock: m.clock };
+    const desc: PlayDesc = { id: 0, type: 'kickoff', seed: 0, offense: 0, dir: 1, los: m.ballX, down: 1, toGo: 10, playbook: 0, defense: 0, clock: m.clock };
     return { desc, seats: [], roles: [], slots: [], kits: kitsFor(m), routes: [], firstDownX: null, aimAlpha: 1, field: this.fieldFor(m), skins: [], stars: [], names: [] };
   }
 
@@ -569,29 +603,59 @@ export class Session {
       drawBanner(ctx, m.banner.text, m.banner.kind, sub, team, this.pres.bannerAge(now));
       if (m.banner.kind === 'half') drawScoreboard(ctx, m);
     } else if (sim && this.controlling()) {
-      if (sim.phase === 'pre') bottom = 'TAP TO SNAP. TAP RB TO HAND OFF, QB TO RUN';
+      if (sim.phase === 'pre') bottom = snapHint(sim);
       else if (sim.phase === 'kickPower') bottom = 'TAP IN THE GREEN FOR POWER';
       else if (sim.phase === 'kickAim') bottom = 'TAP AS THE ARROW CROSSES THE MIDDLE';
       else if (sim.phase === 'pocket') bottom = sim.aim.on ? 'RELEASE TO THROW' : 'DRAG BACK TO AIM';
       else if (sim.ezWait > 0) bottom = 'TAP TO RUN IT OUT';
     } else if (!this.opts.local && m.phase !== 'choice4th' && m.phase !== 'conversion' && m.phase !== 'kickChoice' && m.phase !== 'final' && m.phase !== 'replay' && !mine) {
-      bottom = `WATCHING: ${TEAM_BY_ID[m.teams[this.controllerOf(m)]].id} ON OFFENSE`;
+      if (m.phase !== 'huddle') bottom = `WATCHING: ${TEAM_BY_ID[m.teams[this.controllerOf(m)]].id} ON OFFENSE`;
     }
+    // The line on the last play runs until the huddle: by the time a play from scrimmage lines up, it's old news.
     const c = this.pres.commentary;
-    if (c && m.phase !== 'live' && m.phase !== 'coinToss' && m.phase !== 'final' && m.phase !== 'banner' && m.phase !== 'replay' && m.last) {
+    const huddled = m.phase === 'huddle' || (m.phase === 'presnap' && m.play?.type === 'scrimmage');
+    if (c && !huddled && m.phase !== 'live' && m.phase !== 'coinToss' && m.phase !== 'final' && m.phase !== 'banner' && m.phase !== 'replay' && m.last) {
       const team = TEAM_BY_ID[m.teams[m.last.possessor]];
       drawStrip(ctx, c, 320, 74, lum(team.primary) > 0.62 ? '#14181c' : '#fff', textWidth(c, 2) <= 620 ? 2 : 1, team.primary);
     }
     if (bottom) {
-      // A long hint sits higher, clear of the buttons in the bottom corners.
+      // A long hint sits higher, clear of the buttons in the bottom corners. A short one goes on the
+      // grass under the near sideline, so it never covers anyone on the field.
       const wide = textWidth(bottom, 2) > 360;
-      drawStrip(ctx, bottom, 320, wide ? 318 : 334, '#fff', 2);
+      drawStrip(ctx, bottom, 320, wide ? 318 : screenY(T.field.width) + 10, '#fff', 2);
     }
     const f = this.frame;
     // The last frame can still be a kick once a banner is up, so the meter only shows while a kick is being taken.
     this.meterShown = this.hasFrame && (f.phase === 'kickPower' || f.phase === 'kickAim') && (m.phase === 'presnap' || m.phase === 'live');
     if (this.meterShown) drawKickMeter(ctx, f);
     if (now < this.turnBannerEnd) drawStrip(ctx, this.turnBanner, 320, 140, '#ffd23f', 3);
+  }
+
+  /** What the playbook shows on this screen: a call to make, a call made, or the other side calling. */
+  private viewHuddle(m: MatchState, now: number): PlaybookView | null {
+    const h = m.huddle;
+    const play = m.play;
+    if (m.phase !== 'huddle' || !h || !play || this.paused || this.waiting) return null;
+    const deadline = this.playClockEnd ?? now;
+    const total = T.timers.huddle;
+    const off = play.offense;
+    const seatOf = (side: CallSide): Seat => (side === 'off' ? off : (1 - off) as Seat);
+    const base = `${play.id}:${m.timeouts[0]}:${m.timeouts[1]}`;
+    let side: CallSide | null = null;
+    // One screen calls both sides in turn, offense first. Online, each screen calls its own.
+    if (this.opts.local) side = h.calls[0] === -1 ? 'off' : h.calls[1] === -1 && !h.computer ? 'def' : null;
+    else if (this.seat !== null) side = callerOf(m, 'off') === this.seat ? 'off' : callerOf(m, 'def') === this.seat ? 'def' : null;
+    if (side) {
+      const i = side === 'off' ? 0 : 1;
+      const team = m.teams[seatOf(side)];
+      const situation = play.type === 'twoPoint' ? 'TWO-POINT TRY' : `${downText(m)}  ${spotText(m)}`;
+      const c = m.last?.call;
+      const last = c ? `LAST: ${PLAYBOOK[c[0]]?.name ?? ''} VS ${DEF_CALLS[c[1]]?.name ?? ''}` : '';
+      if (h.calls[i] === -1 && h.suggest[i] >= 0) return { mode: 'call', key: `${base}:${side}:call`, side, team, suggest: h.suggest[i], situation, last, deadline, total, keys: this.keys };
+      if (h.calls[i] >= 0) return { mode: 'locked', key: `${base}:${side}:locked`, side, team, id: h.calls[i], situation, last, deadline, total, waitingFor: side === 'off' ? 'THE DEFENSE IS CALLING' : 'THE OFFENSE IS CALLING' };
+    }
+    const calling = TEAM_BY_ID[m.teams[off]].id;
+    return { mode: 'watch', key: `${base}:watch`, text: `${calling} IN THE HUDDLE`, deadline, total };
   }
 
   private statusText(m: MatchState): string {

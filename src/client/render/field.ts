@@ -19,26 +19,29 @@ function lcg(seed: number): () => number {
 
 const SKY: Record<Weather, string> = { clear: '#58b4f4', rain: '#56607a', snow: '#b4c4d4', wind: '#7cc0e8' };
 const even = (v: number): number => Math.round(v / 2) * 2;
+const CROWD_ROWS = 4;
 
 function drawStands(g: CanvasRenderingContext2D, w: number, o: FieldOpts, rand: () => number): void {
   const standsH = T.view.standsH;
+  // The sky takes whatever the crowd leaves.
+  const sky = Math.max(8, standsH - CROWD_ROWS * 8);
   const indoor = o.weather === 'clear' && o.seed % 3 === 0;
   g.fillStyle = indoor ? '#20262d' : SKY[o.weather];
-  g.fillRect(0, 0, w, 20);
+  g.fillRect(0, 0, w, sky);
   if (indoor) {
     // A roof truss for an indoor stadium.
     g.fillStyle = '#3b444e';
-    for (let x = 0; x < w; x += 24) { g.fillRect(x, 3, 2, 15); g.fillRect(x, 3, 24, 2); g.fillRect(x, 16, 24, 2); }
+    for (let x = 0; x < w; x += 24) { g.fillRect(x, 2, 2, sky - 4); g.fillRect(x, 2, 24, 2); g.fillRect(x, sky - 4, 24, 2); }
     g.fillStyle = '#f7efc0';
-    for (let x = 36; x < w; x += 96) g.fillRect(x, 6, 8, 3);
+    for (let x = 36; x < w; x += 96) g.fillRect(x, even(sky / 2) - 2, 8, 3);
   } else if (o.weather === 'clear') {
     g.fillStyle = '#e8f3fb';
-    for (let x = 30; x < w; x += 170) { g.fillRect(x, 15, 34, 3); g.fillRect(x + 8, 12, 18, 3); }
+    for (let x = 30; x < w; x += 170) { g.fillRect(x, sky - 5, 34, 3); g.fillRect(x + 8, sky - 8, 18, 3); }
   }
   // The crowd: blocks of colour with a head on top, on two-tone steps.
   const crowd = [o.home.primary, o.home.primary, o.home.primary, o.home.secondary, o.visitor.primary, '#f4f4ee', '#ffd23f', '#e8483c'];
-  for (let row = 0; row < 5; row++) {
-    const y = 20 + row * 8;
+  for (let row = 0; row < CROWD_ROWS; row++) {
+    const y = sky + row * 8;
     g.fillStyle = row % 2 ? '#1c2548' : '#242f5c';
     g.fillRect(0, y, w, 8);
     for (let x = (row % 2) * 4; x < w; x += 8) {

@@ -22,12 +22,12 @@ interface Item { key: keyof MatchConfig; label: string; unit?: string; names?: R
 interface Group { title: string; items: Item[] }
 
 const ON_OFF = { true: 'On', false: 'Off' };
-const TIME: Group = { title: 'TIME', items: [
+const TIME: Group = { title: 'TIME AND CALLS', items: [
   { key: 'quarter', label: 'Quarter length', unit: 'min' },
   { key: 'playClock', label: 'Play clock', unit: 'sec' },
   { key: 'twoMinute', label: 'Two-minute warning', names: ON_OFF },
   { key: 'timeouts', label: 'Timeouts per half', names: { auto: 'Auto' } },
-  { key: 'audibles', label: 'Audibles per half' },
+  { key: 'defense', label: 'Defense calls', names: { players: 'Players', computer: 'Computer' } },
   { key: 'pauses', label: 'Pauses per player' },
   { key: 'reconnect', label: 'Reconnect wait', unit: 'min' },
 ] };

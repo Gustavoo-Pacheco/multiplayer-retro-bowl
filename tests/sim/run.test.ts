@@ -12,31 +12,71 @@ function stepN(s: SimState, n: number, inputs: SimInput[] = []): void {
   for (let i = 1; i < n; i++) step(s);
 }
 
+const HB_DIVE = 0;
+const QB_SNEAK = 5;
+const PA_POST = 18;
+
+/** Steps until the ball is handed off on a run play, or gives up after two seconds. */
+function toHandoff(s: SimState): void {
+  for (let i = 0; i < 2 * T.hz && !(s.phase === 'run' && s.ball.holder === 1); i++) step(s);
+}
+
 /** A handed-off RB, with the defenders pushed out of the way. */
 function runner(over = {}): SimState {
-  const s = play(over);
+  const s = play({ playbook: HB_DIVE, ...over });
   stepN(s, 2, [{ k: 'snap' }]);
-  step(s, [{ k: 'handoff' }]);
-  for (const p of s.players) if (p.seat !== s.desc.offense) { p.x = 110; p.y = 1 + p.i * 0.5; p.job = 'idle'; }
+  toHandoff(s);
+  // Everyone but the runner off to the side: the defense downfield, his blockers behind the play.
+  for (const p of s.players) {
+    p.engaged = -1;
+    if (p.seat !== s.desc.offense) { p.x = 110; p.y = 1 + p.i * 0.5; p.job = 'idle'; }
+    else if (p.i !== 1) { p.x = s.desc.los - s.desc.dir * 15; p.y = 1 + p.i * 0.5; p.job = 'idle'; }
+  }
   s.players[1].route = null;
   return s;
 }
 
-describe('handoff and QB run', () => {
-  it('a tap on the RB in the window hands off', () => {
-    const s = play();
+describe('handoffs, fakes and QB runs', () => {
+  it('a run play hands off at the mesh by itself', () => {
+    const s = play({ playbook: HB_DIVE });
     stepN(s, 2, [{ k: 'snap' }]);
-    step(s, [{ k: 'handoff' }]);
+    expect(s.ball.holder).toBe(0);
+    toHandoff(s);
     expect(s.phase).toBe('run');
     expect(s.ball.holder).toBe(1);
     expect(s.ran).toBe(true);
+    expect(s.t).toBeLessThan(1.5);
   });
-  it('a handoff after 1.2 seconds is ignored', () => {
+  it('a tap on the QB before the mesh keeps it, and the back carries out the fake', () => {
+    const s = play({ playbook: HB_DIVE });
+    stepN(s, 2, [{ k: 'snap' }]);
+    step(s, [{ k: 'qbRun' }]);
+    expect(s.phase).toBe('run');
+    expect(s.ball.holder).toBe(0);
+    expect(s.players[1].job).toBe('fake');
+  });
+  it('play action fakes the handoff and keeps the ball in the pocket', () => {
+    const s = play({ playbook: PA_POST });
+    stepN(s, 2, [{ k: 'snap' }]);
+    stepN(s, Math.ceil(1.2 * T.hz));
+    expect(s.phase).toBe('pocket');
+    expect(s.ball.holder).toBe(0);
+    expect(['fake', 'block']).toContain(s.players[1].job);
+  });
+  it('linebackers step up on the fake, then drop', () => {
+    const s = play({ playbook: PA_POST, defense: 4 });
+    const lb = s.players[11];
+    const start = (lb.x - s.desc.los) * s.desc.dir;
+    stepN(s, 2, [{ k: 'snap' }]);
+    stepN(s, Math.ceil(0.6 * T.hz));
+    expect((lb.x - s.desc.los) * s.desc.dir).toBeLessThan(start);
+  });
+  it('a pass play never hands off', () => {
     const s = play();
     stepN(s, 2, [{ k: 'snap' }]);
-    stepN(s, Math.ceil(T.pocket.handoffWindow * T.hz) + 2);
-    step(s, [{ k: 'handoff' }]);
+    stepN(s, Math.ceil(1.5 * T.hz));
     expect(s.ball.holder).toBe(0);
+    expect(s.phase).toBe('pocket');
   });
   it('a QB run ends any chance to throw', () => {
     const s = play();
@@ -46,6 +86,22 @@ describe('handoff and QB run', () => {
     expect(s.ball.holder).toBe(0);
     step(s, [{ k: 'aimStart' }]);
     expect(s.aim.on).toBe(false);
+  });
+  it('a sneak pushes into the pile and dives for a yard or two, nearly always', () => {
+    let gained = 0;
+    let made = 0;
+    const n = 40;
+    for (let seed = 1; seed <= n; seed++) {
+      const s = play({ playbook: QB_SNEAK, seed, toGo: 1 });
+      step(s, [{ k: 'snap' }]);
+      for (let i = 0; i < 3000 && !s.finished; i++) { if (s.frozen) acceptHandoff(s); step(s); }
+      const yards = s.result!.yards;
+      gained += yards;
+      if (yards >= 1) made += 1;
+    }
+    expect(gained / n).toBeGreaterThan(1);
+    expect(gained / n).toBeLessThan(4.5);
+    expect(made / n).toBeGreaterThan(0.6);
   });
 });
 

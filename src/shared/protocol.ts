@@ -1,6 +1,6 @@
 // Message types shared by the browser and the room server.
 import type { MatchConfig } from './data/config';
-import type { Choice, MatchState } from './rules/match';
+import type { CallSide, Choice, MatchState } from './rules/match';
 import type { PlayDesc, PlayResult, Seat, SimState } from './sim/state';
 
 export type { Seat } from './sim/state';
@@ -30,7 +30,8 @@ export type ClientMsg =
   | { t: 'ready'; ready: boolean }
   | { t: 'rematch' }
   | { t: 'snap'; playId: number }
-  | { t: 'audible'; playId: number }
+  /** A play call in the huddle: the offense's play or the defense's call, as an index into its book. */
+  | { t: 'call'; playId: number; side: CallSide; id: number }
   | { t: 'timeout' }
   | { t: 'choice'; c: Choice }
   | { t: 'pause' }

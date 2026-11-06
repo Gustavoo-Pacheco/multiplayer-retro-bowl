@@ -1,5 +1,6 @@
 // A bare WebSocket client that speaks the room protocol, for room tests.
 import type { ClientMsg, ServerMsg } from '../../src/shared/protocol';
+import type { MatchState } from '../../src/shared/rules/match';
 import { makeRoomCode } from '../../src/shared/protocol';
 
 export const BASE = 'ws://localhost:5198';
@@ -11,6 +12,9 @@ export class TestClient {
   closeCode: number | null = null;
   seat: 0 | 1 | null = null;
   token = '';
+  /** Calls the coach's pick as soon as a huddle asks this seat for a call, so tests not about the huddle go straight to the snap. */
+  autoCall = true;
+  private called = '';
   private waiters: (() => void)[] = [];
 
   constructor(public code: string) {}
@@ -24,12 +28,25 @@ export class TestClient {
         const m = JSON.parse(e.data) as ServerMsg;
         if (m.t === 'welcome') { this.seat = m.seat; this.token = m.token; }
         this.inbox.push(m);
+        if (this.autoCall && (m.t === 'matchState' || m.t === 'playStart')) this.callIfAsked(m.match);
       } else this.frames.push(e.data as ArrayBuffer);
       this.waiters.splice(0).forEach((w) => w());
     };
     this.ws.onclose = (e) => { this.closeCode = e.code; this.waiters.splice(0).forEach((w) => w()); };
     await new Promise<void>((res, rej) => { this.ws.onopen = () => res(); this.ws.onerror = () => rej(new Error('ws error')); });
     return this;
+  }
+
+  private callIfAsked(m: MatchState): void {
+    const h = m.huddle;
+    if (m.phase !== 'huddle' || !h || !m.play || this.seat === null) return;
+    const side = m.play.offense === this.seat ? 'off' : h.computer ? null : 'def';
+    if (!side) return;
+    const i = side === 'off' ? 0 : 1;
+    const key = `${m.play.id}:${m.timeouts.join(',')}:${side}`;
+    if (h.calls[i] !== -1 || this.called === key) return;
+    this.called = key;
+    this.send({ t: 'call', playId: m.play.id, side, id: Math.max(0, h.suggest[i]) });
   }
 
   send(m: ClientMsg): void { this.ws.send(JSON.stringify(m)); }

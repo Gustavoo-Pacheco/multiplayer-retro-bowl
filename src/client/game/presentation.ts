@@ -73,6 +73,7 @@ export class Presentation {
       }
       audio.setSong(kind === 'half' ? 'menu' : null);
     }
+    if (prev?.phase === 'huddle' && m.phase === 'presnap') audio.play('clap');
     if (m.phase === 'replay' && prev?.phase !== 'replay') this.replay.begin();
     if (m.phase !== 'replay') this.replay.active = false;
     if (m.phase === 'final' && prev?.phase !== 'final') this.onFinal(m, me);
@@ -164,7 +165,8 @@ export class Presentation {
   /** The referee stands behind the ball and signals what happened. */
   private refFor(m: MatchState | null, info: SceneInfo, f: Frame): SceneOpts['ref'] {
     const x = f.phase === 'pre' ? info.desc.los - info.desc.dir * 7 : f.bx - 5;
-    const y = 2.2;
+    // Far enough in from the far sideline that his whole figure stands on the grass.
+    const y = 2.8;
     const face = f.bx >= x ? 1 : -1;
     if (m && f.phase !== 'pre' && (m.phase !== 'live' && m.phase !== 'presnap')) {
       const l = m.last;

@@ -1,5 +1,6 @@
 // The ball carrier: moves forward automatically, with gestures adding moves.
-import { PLAYBOOK } from '../data/playbook';
+import { DEF_CALLS, PLAYBOOK } from '../data/playbook';
+import { moveTo } from './ai/move';
 import { rnd } from './rng';
 import { T } from './tuning';
 import { endPlay } from './end';
@@ -13,44 +14,89 @@ export function beginRun(s: SimState): void {
   const g = s.g;
   g.lastGestureAt = s.t;
   g.ballT = s.t;
-  g.jukeT = 0; g.stiffT = 0; g.diveT = 0; g.slowT = 0; g.truck = false; g.truckMeter = 0; g.jukeLoss = 0;
+  g.jukeT = 0; g.stiffT = 0; g.diveT = 0; g.slowT = 0; g.truck = false; g.truckMeter = 0; g.jukeLoss = 0; g.sneakPush = false;
   if (h >= 0) g.stiffsLeft = Math.floor(s.players[h].str * T.run.stiffPerStrength);
   for (const p of s.players) {
     if (p.i === h) { p.job = 'carry'; if (p.engaged >= 0) { const e = s.players[p.engaged]; e.engaged = -1; p.engaged = -1; } }
-    else if (p.seat === s.possessor) { p.job = 'lead'; if (p.engaged < 0) p.target = -1; }
+    else if (p.seat === s.possessor) {
+      // A pulling lineman keeps running to the hole.
+      if (p.job !== 'path') p.job = 'lead';
+      if (p.engaged < 0) p.target = -1;
+    }
     else p.job = 'pursue';
   }
 }
 
-/** The handoff: the RB takes the ball and follows the play's run lane. */
-export function doHandoff(s: SimState): void {
-  if (s.phase !== 'pocket' || s.ball.holder !== 0 || s.phaseT > T.pocket.handoffWindow) return;
+/**
+ * The mesh: on a run the back takes the ball and follows his path through the hole; on play action
+ * the QB pulls it back out and the back carries out the fake.
+ */
+export function meshHandoff(s: SimState): void {
+  const m = s.mesh;
+  if (!m || m.done || s.phase !== 'pocket' || s.ball.holder !== 0) return;
+  m.done = true;
   const rb = s.players[1];
   const qb = s.players[0];
+  qb.anim = A.handoff;
+  rb.routeI = m.ri + 2;
+  if ((PLAYBOOK[s.desc.playbook]?.kind ?? 'run') === 'pa') { rb.job = 'fake'; rb.ax = s.t; return; }
   if (s.aim.on) s.aim.on = false;
   s.ball.holder = 1;
   s.ran = true;
-  qb.anim = A.handoff;
   s.lastCarrier = rb.seat;
   beginRun(s);
   qb.job = 'lead';
-  const play = PLAYBOOK[s.desc.playbook] ?? PLAYBOOK[0];
-  const dir = s.desc.dir;
-  const side = rb.y >= T.field.center ? 1 : -1;
-  const laneY = play.lane === 'inside' ? T.field.center + side * 0.9 : T.field.center + side * 5.2;
-  const clampX = (x: number) => Math.max(0.5, Math.min(T.field.len - 0.5, x));
-  rb.route = [clampX(s.desc.los - dir * 1), laneY, clampX(s.desc.los + dir * 2), laneY];
-  rb.routeI = 0;
-  rb.routeStop = false;
   addTouch(s, rb);
 }
 
+/** The back carries out a play-action fake through the hole, then turns to block. */
+export function updateFake(s: SimState, p: SimPlayer, dt: number): void {
+  const rt = p.route;
+  if (!rt || p.routeI >= rt.length || s.t - p.ax > T.play.paFakeRun) { p.job = 'block'; p.route = null; return; }
+  moveTo(p, rt[p.routeI], rt[p.routeI + 1], p.top * 0.85, dt);
+  if (Math.hypot(rt[p.routeI] - p.x, rt[p.routeI + 1] - p.y) < 0.6) p.routeI += 2;
+  p.anim = A.run;
+  p.face = p.vx >= 0 ? 1 : -1;
+}
+
+/** The QB keeps it on a sneak: straight ahead behind the center. */
+export function startSneak(s: SimState): void {
+  const qb = s.players[0];
+  s.ran = true;
+  if (s.mesh) s.mesh.done = true;
+  beginRun(s);
+  // He pushes into the pile and dives over it. A box stacked with rushers gives less; once in a while he squirts free.
+  const R = T.run;
+  const call = DEF_CALLS[s.desc.defense];
+  const stacked = !!call && call.jobs.filter((j) => j.k === 'rush' || j.k === 'crash').length >= 5;
+  const free = rnd(s) < R.sneakBreak;
+  const push = free ? 6 : Math.max(0.1, R.sneakPushLo + (R.sneakPushHi - R.sneakPushLo) * rnd(s) - (stacked ? R.sneakStacked : 0));
+  const x = Math.max(0.5, Math.min(T.field.len - 0.5, s.desc.los + s.desc.dir * push));
+  qb.route = [x, qb.y];
+  qb.routeI = 0;
+  s.g.sneakPush = !free;
+  addTouch(s, qb);
+}
+
+/** The runner launches forward and goes down where he lands. */
+function startDive(s: SimState): void {
+  const R = T.run;
+  s.g.diveT = R.diveTime;
+  s.g.diveGain = R.diveLo + (R.diveHi - R.diveLo) * rnd(s);
+  s.ev |= EV.dive;
+}
+
+/** The QB takes off: a scramble on a pass play, or keeping it on a run before the mesh. */
 export function doQbRun(s: SimState): void {
   if (s.phase !== 'pocket' || s.ball.holder !== 0) return;
+  const keeper = !!s.mesh && !s.mesh.done;
+  if (s.mesh) s.mesh.done = true;
   s.aim.on = false;
   s.scrambled = true;
   s.ran = true;
   beginRun(s);
+  // Pulled before the mesh: the back carries out the fake through the hole, which holds a defender or two.
+  if (keeper) { const rb = s.players[1]; rb.job = 'fake'; rb.ax = s.t; rb.routeI = s.mesh!.ri + 2; }
   s.players[0].route = null;
   addTouch(s, s.players[0]);
 }
@@ -100,9 +146,7 @@ export function applySwipe(s: SimState, dx: number, dy: number): void {
     g.lastJukeAt = s.t;
     s.ev |= EV.juke;
   } else if (ux * dir > 0) {
-    g.diveT = R.diveTime;
-    g.diveGain = R.diveLo + (R.diveHi - R.diveLo) * rnd(s);
-    s.ev |= EV.dive;
+    startDive(s);
   } else {
     g.slowT = R.slowTime;
   }
@@ -170,7 +214,10 @@ export function updateCarrier(s: SimState, p: SimPlayer, dt: number): void {
     const dx = tx - p.x;
     const dy = ty - p.y;
     const n = Math.hypot(dx, dy);
-    if (n < 0.6) p.routeI += 2;
+    if (n < 0.6) {
+      p.routeI += 2;
+      if (g.sneakPush && p.routeI >= p.route.length) { g.sneakPush = false; startDive(s); }
+    }
     vx = n > 0 ? (dx / n) * v : dir * v;
     vy = n > 0 ? (dy / n) * v : 0;
   } else {

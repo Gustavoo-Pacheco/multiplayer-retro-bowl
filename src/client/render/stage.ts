@@ -1,5 +1,6 @@
 // The 640 x 360 canvas, scaled evenly to fit the window, with menus layered above it.
-import { H, W } from './view';
+// Its buffer is RES times that, and drawing code works in the 640 x 360 grid.
+import { H, RES, W } from './view';
 
 export class Stage {
   root: HTMLDivElement;
@@ -14,10 +15,11 @@ export class Stage {
     this.root.className = 'stage';
     this.root.dataset.testid = 'stage';
     this.canvas = document.createElement('canvas');
-    this.canvas.width = W;
-    this.canvas.height = H;
+    this.canvas.width = W * RES;
+    this.canvas.height = H * RES;
     this.canvas.dataset.testid = 'canvas';
     this.ctx = this.canvas.getContext('2d', { alpha: false })!;
+    this.ctx.setTransform(RES, 0, 0, RES, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
     this.overlay = document.createElement('div');
     this.overlay.className = 'overlay';

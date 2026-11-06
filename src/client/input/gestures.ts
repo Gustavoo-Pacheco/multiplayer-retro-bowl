@@ -8,23 +8,20 @@ export interface GestureContext {
   phase: SimPhase;
   /** The player in control here. False while watching. */
   active: boolean;
-  /** Canvas positions of the QB and RB, for tap targets. */
+  /** Canvas position of the QB, the tap target for a QB run. */
   qb: { x: number; y: number } | null;
-  rb: { x: number; y: number } | null;
-  handoffOpen: boolean;
 }
 
 type Mode = 'none' | 'pending' | 'aim' | 'run' | 'done';
 
-interface Press { id: number; x0: number; y0: number; t0: number; x: number; y: number; mode: Mode; pendingOn: 'rb' | 'qb' | null; ox: number; oy: number; ot: number; truck: boolean; moved: boolean }
+interface Press { id: number; x0: number; y0: number; t0: number; x: number; y: number; mode: Mode; ox: number; oy: number; ot: number; truck: boolean; moved: boolean }
 
-const dist = (p: { x: number; y: number } | null, x: number, y: number): number =>
-  (p ? Math.hypot(p.x - x, p.y - 12 - y) : 1e9);
-const hit = (p: { x: number; y: number } | null, x: number, y: number): boolean => dist(p, x, y) <= T.input.touchRadius;
+const hit = (p: { x: number; y: number } | null, x: number, y: number): boolean =>
+  !!p && Math.hypot(p.x - x, p.y - 12 - y) <= T.input.touchRadius;
 
 export class GestureRecognizer {
   private press: Press | null = null;
-  ctx: GestureContext = { phase: 'pre', active: false, qb: null, rb: null, handoffOpen: false };
+  ctx: GestureContext = { phase: 'pre', active: false, qb: null };
   out: SimInput[] = [];
 
   private emit(i: SimInput): void { this.out.push(i); }
@@ -41,20 +38,15 @@ export class GestureRecognizer {
       if (this.press?.mode === 'aim') this.emit({ k: 'bullet' });
       return;
     }
-    const p: Press = { id, x0: x, y0: y, t0: t, x, y, mode: 'none', pendingOn: null, ox: x, oy: y, ot: t, truck: false, moved: false };
+    const p: Press = { id, x0: x, y0: y, t0: t, x, y, mode: 'none', ox: x, oy: y, ot: t, truck: false, moved: false };
     this.press = p;
     switch (this.ctx.phase) {
       case 'pre': this.emit({ k: 'snap' }); p.mode = 'done'; break;
       case 'kickPower': case 'kickAim': case 'kickFlight': this.emit({ k: 'tap' }); p.mode = 'done'; break;
       case 'pocket':
-        {
-          // Touch targets overlap, so the nearer player wins.
-          const onRb = this.ctx.handoffOpen && hit(this.ctx.rb, x, y);
-          const onQb = hit(this.ctx.qb, x, y);
-          if (onRb && (!onQb || dist(this.ctx.rb, x, y) < dist(this.ctx.qb, x, y))) { p.mode = 'pending'; p.pendingOn = 'rb'; }
-          else if (onQb) { p.mode = 'pending'; p.pendingOn = 'qb'; }
-          else this.beginAim(p);
-        }
+        // A quick tap on the QB is a QB run. Anything else starts the aim.
+        if (hit(this.ctx.qb, x, y)) p.mode = 'pending';
+        else this.beginAim(p);
         break;
       case 'run': p.mode = 'run'; this.emit({ k: 'tap' }); break;
       default: p.mode = 'none';
@@ -106,7 +98,7 @@ export class GestureRecognizer {
     const p = this.press;
     if (!p || p.id !== id) return;
     if (p.mode === 'pending') {
-      if (t - p.t0 <= T.input.tapMaxMs) this.emit(p.pendingOn === 'rb' ? { k: 'handoff' } : { k: 'qbRun' });
+      if (t - p.t0 <= T.input.tapMaxMs) this.emit({ k: 'qbRun' });
     } else if (p.mode === 'aim') {
       this.emit({ k: 'throw' });
     } else if (p.truck) {

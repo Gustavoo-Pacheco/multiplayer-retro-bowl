@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIG_OPTIONS } from '../../src/shared/data/config';
 import { TestClient } from './client';
-import { clearInbox, pair, toScrimmage, waitState } from './helpers';
+import { clearInbox, pair, toHuddle, toScrimmage, waitState } from './helpers';
 
 const open: TestClient[] = [];
 afterEach(() => { open.splice(0).forEach((c) => c.close()); });
@@ -49,14 +49,21 @@ describe('settings the server enforces', () => {
     expect(def.inbox.some((m) => m.t === 'paused')).toBe(false);
   });
 
-  it('audibles: the pool is spent, and 0 means none', async () => {
-    const one = await start({ audibles: 1 });
-    const id = one.match.play!.id;
-    one.off.send({ t: 'audible', playId: id });
-    await waitState(one.off, (m) => m.audibles[one.off.seat as 0 | 1] === 0);
-    clearInbox(one.off);
-    one.off.send({ t: 'audible', playId: id + 1 });
-    await one.off.wait('error');
+  it('defense calls: Computer has the defense called before the defense player could', async () => {
+    const p = await pair(open, { defense: 'computer' });
+    await p.start();
+    p.a.autoCall = false;
+    p.b.autoCall = false;
+    const { huddle, offView, off, def } = await toHuddle(p);
+    expect(offView.huddle?.computer).toBe(true);
+    // Already made, and hidden from the offense.
+    expect(offView.huddle?.calls[1]).toBe(-2);
+    def.send({ t: 'call', playId: huddle.play!.id, side: 'def', id: 0 });
+    expect((await def.wait('error')).code).toBe('forbidden');
+    off.send({ t: 'call', playId: huddle.play!.id, side: 'off', id: 6 });
+    const m = await waitState(def, (x) => x.phase === 'presnap' && x.play?.type === 'scrimmage');
+    expect(m.play?.playbook).toBe(6);
+    expect(m.play?.defense).toBeGreaterThanOrEqual(0);
   });
 
   for (const reconnect of CONFIG_OPTIONS.reconnect) {

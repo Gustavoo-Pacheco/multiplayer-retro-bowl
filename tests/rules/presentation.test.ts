@@ -57,7 +57,7 @@ describe('without a score', () => {
     expect(shown.phase).toBe('replay');
     const w = walk(shown);
     expect(w.phases).toEqual(['replay']);
-    expect(w.end.phase).toBe('presnap');
+    expect(w.end.phase).toBe('huddle');
     expect(nextController(shown)).toBe(w.end.play!.offense);
   });
 
