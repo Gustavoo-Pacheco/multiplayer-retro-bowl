@@ -1,6 +1,7 @@
 // Draws one frame of a play. Used in the same way by the controller, the watcher and replays.
 import type { Frame } from '../../shared/protocol';
 import type { Role } from '../../shared/data/roster';
+import { handsMiss } from '../../shared/sim/pass';
 import { T } from '../../shared/sim/tuning';
 import { A, type PlayDesc, type Seat } from '../../shared/sim/state';
 import { ATLAS } from '../art/atlas';
@@ -260,7 +261,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
     const qx = X(f.px[0]);
     const qy = Y(f.py[0]);
     const tx = qx + f.ax * PX;
-    const ty = qy + f.ay * PY;
+    const ty = qy + (f.ay - T.view.aimRingZ) * PY;
     ctx.globalAlpha = Math.max(0.05, info.aimAlpha);
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
@@ -272,4 +273,59 @@ export function drawScene(ctx: CanvasRenderingContext2D, f: Frame, info: SceneIn
     ctx.fillRect(Math.round(tx / 2) * 2, Math.round(ty / 2) * 2, 2, 2);
     ctx.globalAlpha = 1;
   }
+  if (devDraw.hitBox) drawHitBox(ctx, f, info, X, Y);
+}
+
+/** Developer overlays, switched from the ?dev=1 panel. */
+export const devDraw = { hitBox: false };
+let hitBoxFor = -1;
+
+/**
+ * Draws one receiver's catch zone, read live from T.pass: the hands box (green, brighter while the ball is in it)
+ * and how far he can stretch (yellow, dashed). It follows the receiver nearest your aim, or the ball in flight.
+ */
+function drawHitBox(ctx: CanvasRenderingContext2D, f: Frame, info: SceneInfo, X: (x: number) => number, Y: (y: number) => number): void {
+  const n = info.roles.length;
+  const eligible = (i: number) => info.seats[i] === info.desc.offense && info.roles[i] !== 'OL' && info.roles[i] !== 'QB';
+  let tx = NaN;
+  let ty = NaN;
+  let tz = 0;
+  if (f.aimOn && f.phase === 'pocket') { tx = f.px[0] + f.ax; ty = f.py[0] + f.ay; tz = T.pass.catchHeight; }
+  else if (f.phase === 'flight') { tx = f.bx; ty = f.by; tz = f.bz; }
+  if (Number.isFinite(tx)) {
+    let best = 1e9;
+    for (let i = 0; i < n; i++) {
+      if (!eligible(i)) continue;
+      const d = handsMiss({ x: f.px[i], y: f.py[i] }, tx, ty, tz);
+      if (d < best) { best = d; hitBoxFor = i; }
+    }
+  }
+  if (hitBoxFor < 0 || hitBoxFor >= n || !eligible(hitBoxFor)) {
+    hitBoxFor = -1;
+    for (let i = 0; i < n; i++) if (eligible(i)) { hitBoxFor = i; break; }
+  }
+  if (hitBoxFor < 0) return;
+  const P = T.pass;
+  const i = hitBoxFor;
+  const sx = X(f.px[i]);
+  const sy = Y(f.py[i]);
+  const left = sx - P.handsHalfW * PX;
+  const top = sy - P.handsHi * PY;
+  const w = 2 * P.handsHalfW * PX;
+  const hgt = (P.handsHi - P.handsLo) * PY;
+  const r = Math.max(0, P.stretch);
+  const inHands = f.phase === 'flight' && f.carrier < 0 && handsMiss({ x: f.px[i], y: f.py[i] }, f.bx, f.by, f.bz) <= 0;
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(255,210,63,.9)';
+  ctx.beginPath();
+  ctx.roundRect(left - r * PX, top - r * PY, w + 2 * r * PX, hgt + 2 * r * PY, Math.min(r * PX, r * PY));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = inHands ? 'rgba(80,255,120,.5)' : 'rgba(80,255,120,.18)';
+  ctx.fillRect(left, top, w, hgt);
+  ctx.strokeStyle = '#50ff78';
+  ctx.strokeRect(left + 0.5, top + 0.5, w - 1, hgt - 1);
+  ctx.restore();
 }
