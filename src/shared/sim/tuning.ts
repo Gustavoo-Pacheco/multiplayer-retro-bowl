@@ -14,6 +14,12 @@ export const T = {
     // standsH + walkH + stripH + fieldH + grassH = h.
     standsH: 46, walkH: 9, stripH: 13, fieldH: 262, grassH: 30,
     camEase: 5, camLead: 6, spriteH: 26,
+    /**
+     * How high, in yards, the aim ring is drawn above the spot the ball lands on. At pass.catchHeight the ring
+     * sits where the ball will be drawn when it arrives, so a ring on a receiver's chest is a ball at his feet,
+     * which is where the catch is measured. 0 draws it on the ground.
+     */
+    aimRingZ: 1.2,
   },
 
   attr: { min: 1, max: 10, baseLo: 3, baseHi: 8, scoreLo: 60, scoreHi: 99, positionJitter: 1, starBonus: 2, backupPenalty: 2 },
@@ -40,9 +46,24 @@ export const T = {
     rangeLo: 20, rangeHi: 65,
     errorPerAccuracyDeg: 0.4, fatigueErrorDeg: 2.5,
     armFatigueLo: 0.005, armFatigueHi: 0.02, armFatigueMax: 0.25,
-    catchRadius: 2.5, catchBase: 0.63, catchPerAttr: 0.04, catchPerMiss: 0.25, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
+    /**
+     * Catching, in yards, measured on the ball as drawn. Each receiver has a hands box on his figure: from his
+     * waist (handsLo above his feet) to above his head (handsHi), handsHalfW either side. A ball drawn inside it
+     * costs nothing. Outside it, he stretches for it up to `stretch` yards away, losing catchPerMiss a yard, so
+     * a ball at his feet is a harder shoestring catch. The check runs from catchEarly yards before the aimed
+     * spot, once the ball is below reachZ, until it hits the ground or has carried catchLate yards past the spot.
+     * The box fits the figures as drawn at 3/4 size. catchBase and catchPerAttr hold completions at the plan's 60 to 70%, and a 10 still catches nearly every ball in his hands.
+     */
+    handsLo: 0.75, handsHi: 2.25, handsHalfW: 0.75, stretch: 1.3, catchEarly: 3, catchLate: 3, reachZ: 2.25,
+    catchBase: 0.4, catchPerAttr: 0.058, catchPerMiss: 0.4, catchDefenderNear: 0.15, defenderNearRadius: 1.5, catchBullet: 0.15,
     weatherPenalty: { clear: 0, rain: 0.1, snow: 0.15, wind: 0.05 } as Record<string, number>,
     pickBase: 0.1, pickPerAttr: 0.03, pickPerDist: 0.1,
+    /**
+     * Bad passes. A ball pickBadMiss yards or more outside every receiver's hands box is fully bad, and nearer
+     * ones count in proportion. A fully bad pass adds pickBadPass to the pick odds, and lets defenders reach
+     * pickBadReach yards beyond the difficulty's interception radius.
+     */
+    pickBadPass: 0.3, pickBadMiss: 2, pickBadReach: 1.0,
     /** A defender who gets there at a full sprint mostly knocks it away: the pick chance shrinks with his speed. */
     pickOnTheRun: 0.6,
     windDriftDeg: 2.0,

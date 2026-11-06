@@ -121,7 +121,11 @@ export interface BallState {
   vx: number; vy: number; bounce: number;
 }
 
-export interface PassState { bullet: boolean; target: number; piFlag: boolean; piSpotX: number; piChecked: boolean; distance: number; thrownFromX: number }
+export interface PassState {
+  bullet: boolean; target: number; piFlag: boolean; piSpotX: number; piChecked: boolean; distance: number; thrownFromX: number;
+  /** The receiver who has come closest to the ball while it was catchable, and how close (yards). -1 and 1e9 until then. */
+  reachI: number; reachD: number;
+}
 
 export interface KickState {
   meter: number; meterDir: 1 | -1; power: number;

@@ -1,5 +1,6 @@
 // The ?dev=1 tools: live tuning, the bot switch, forced events and a download of the last play.
 import { T } from '../../shared/sim/tuning';
+import { devDraw } from '../render/scene';
 import { h } from './dom';
 
 export type ForceKind = 'int' | 'fumble' | 'sack';
@@ -72,6 +73,12 @@ export function mountDevPanel(parent: HTMLElement, a: DevActions): DevPanel {
   };
 
   const buttons = h('div', { class: 'dev-buttons' });
+  // The catch zone overlay starts on, so the pass.hands* and pass.stretch numbers below can be tuned by eye.
+  devDraw.hitBox = true;
+  const hitBtn = h('button', { class: 'small on', testid: 'dev-hitbox', onclick: () => { devDraw.hitBox = !devDraw.hitBox; paintHit(); } }, '');
+  const paintHit = () => { hitBtn.textContent = `Hit box: ${devDraw.hitBox ? 'on' : 'off'}`; hitBtn.classList.toggle('on', devDraw.hitBox); };
+  paintHit();
+  buttons.append(hitBtn);
   if (a.bot) {
     const bot = a.bot;
     const btn = h('button', { class: 'small', testid: 'dev-bot', onclick: () => { bot.set(!bot.get()); paint(); } }, '');
@@ -98,5 +105,5 @@ export function mountDevPanel(parent: HTMLElement, a: DevActions): DevPanel {
   );
   const toggle = h('button', { class: 'dev-toggle', testid: 'dev-toggle', onclick: () => panel.classList.toggle('open') }, 'DEV');
   parent.append(toggle, panel);
-  return { note, destroy: () => { toggle.remove(); panel.remove(); } };
+  return { note, destroy: () => { devDraw.hitBox = false; toggle.remove(); panel.remove(); } };
 }

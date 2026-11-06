@@ -28,6 +28,7 @@ Add `?dev=1` to a match or practice address for the developer panel, opened with
 | In the panel | What it does |
 | --- | --- |
 | Number list | Edits any value in `tuning.ts` live, with a filter, Reset and Copy changes. Edits stay in that browser until a reload |
+| Hit box | Shows or hides one receiver's catch zone: the hands box in green and how far they can stretch in yellow. Tune it with the `pass.hands` and `pass.stretch` numbers |
 | Bot | Switches the bot on or off for your side |
 | Interception, Fumble, Sack | Forces that event on your plays with the ball, and stays on until it happens |
 | Low clock | Sets the game clock to 0:15. The room server does this, so a deployed copy refuses it |
